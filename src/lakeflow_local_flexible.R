@@ -4,7 +4,7 @@
 ################################################################################
 # set Path to Lakeflow_local folder. 
 ################################################################################
-inPath='C:/Users/rriggs/OneDrive - DOI/Research/LakeFlow_local/'
+inPath='C:/Users/kmcquil/Documents/LakeFlow_Confluence/'
 ################################################################################
 # Load Packages
 ################################################################################
@@ -51,7 +51,7 @@ batch_download_SWOT_lakes <- function(obs_ids){
 }
 
 #FIX ME: Note that I limited it to the first 100 lakes as an example. 
-files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')])[1:100]
+files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')])[5:20]
 combined = rbindlist(files_filt[!is.na(files_filt)])
 ################################################################################
 # Filter lake data. 
@@ -573,6 +573,7 @@ lakeFlow = function(lake){
   if(use_ts_prior==TRUE){
     sword_geoglows = fread(paste0(inPath, '/in/ancillary/sword_geoglows.csv'))
     sword_reaches = c(upID, dnID)
+    sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
     sword_geoglows_filt = sword_geoglows[sword_geoglows$reach_id%in%sword_reaches,c('reach_id','LINKNO')]
     geoglows_reaches = unique(as.list(sword_geoglows$LINKNO[sword_geoglows$reach_id%in%sword_reaches]))
     # Pull in modeled geoglows data. 
@@ -634,6 +635,7 @@ lakeFlow = function(lake){
   }else{
     sword_geoglows = fread(paste0(inPath, '/in/ancillary/sword_geoglows.csv'))
     sword_reaches = c(upID, dnID)
+    sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
     sword_geoglows_filt = sword_geoglows[sword_geoglows$reach_id%in%sword_reaches,c('reach_id','LINKNO')]
     geoglows_reaches = unique(as.list(sword_geoglows$LINKNO[sword_geoglows$reach_id%in%sword_reaches]))
     # Pull in modeled geoglows data. 
@@ -833,3 +835,7 @@ for(i in 1:nrow(viable_locations)){
 }
 lf_outputs = rbindlist(output_list[!is.na(output_list)])
 lf_outputs = lf_outputs[!is.na(lf_outputs$q_lakeflow),]
+
+
+i = 1
+lake = viable_locations$lake[i]
