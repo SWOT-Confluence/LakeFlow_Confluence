@@ -8,6 +8,7 @@ inPath='C:/Users/kmcquil/Documents/LakeFlow_Confluence/'
 ################################################################################
 # Load Packages
 ################################################################################
+
 library(foreign)
 library(lubridate)
 library(rstan)
@@ -24,15 +25,19 @@ library(geoBAMr)
 library(future)
 library(future.apply)
 '%!in%' <- function(x,y)!('%in%'(x,y))
+
 ################################################################################
 # Read in relevant files: Harmonized sword-pld, reservoirs of interest, swot lake data
 ################################################################################
+
 updated_pld = fread(paste0(inPath,"in/SWORDv16_PLDv103_wo_ghost_rch.csv"))
 updated_pld$lake_id =  as.character(updated_pld$lake_id)
 updated_pld$continent = substr(updated_pld$lake_id, 1,1)
+
 ################################################################################
 # Read in lake data via hydrocron. 
 ################################################################################
+
 pull_lake_data = function(feature_id){
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=PriorLake&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=lake_id,time_str,wse,area_total,xovr_cal_q,partial_f,dark_frac,ice_clim_f')
   response = GET(website)
@@ -56,6 +61,7 @@ combined = rbindlist(files_filt[!is.na(files_filt)])
 ################################################################################
 # Filter lake data. 
 ################################################################################
+
 #Testing to see if partial flags make a difference since we're only using wse for lakes at the moment. - partial wse seems great. 
 #lakeData = combined[combined$ice_clim_f<2&combined$dark_frac<=0.5&combined$xovr_cal_q<2&combined$partial_f==0,]
 lakeData = combined[combined$ice_clim_f<2&combined$dark_frac<=0.5&combined$xovr_cal_q<2&combined$time_str!='no_data'&combined$wse>(5000*-1),]
@@ -70,6 +76,7 @@ rm(combined)
 ################################################################################
 # Function to pull SWOT reach data. 
 ################################################################################
+
 pull_data = function(feature_id){
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=Reach&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=reach_id,time_str,wse,width,slope,slope2,d_x_area,area_total,reach_q,p_width,xovr_cal_q,partial_f,dark_frac,ice_clim_f,wse_r_u,slope_r_u,reach_q_b')
   response = GET(website)
@@ -79,6 +86,7 @@ pull_data = function(feature_id){
   data$reach_id = feature_id
   return(data)
 }
+
 ################################################################################
 # Tukey test for removing outliers. 
 ################################################################################

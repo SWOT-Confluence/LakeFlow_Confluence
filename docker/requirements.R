@@ -1,0 +1,46 @@
+# Install packages
+install.packages("remotes")
+library(remotes)
+remotes:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE) 
+library(geoBAMr)
+install.packages("foreign")
+library(foreign)
+install.packages("lubridate")
+library(lubridate)
+install.packages("rstan")
+library(rstan)
+install.packages("data.table")
+library(data.table)
+install.packages("dplyr")
+library(dplyr)
+install.packages("sf")
+library(sf)
+install.packages("raster")
+library(raster)
+install.packages("rstudioapi")
+library(rstudioapi)
+install.packages("jsonlite")
+library(jsonlite)
+install.packages("httr")
+library(httr)
+install.packages("BBmisc")
+library(BBmisc)
+install.packages("future")
+library(future)
+install.packages("future.apply")
+library(future.apply)
+install.packages("reticulate")
+library(reticulate)
+
+#version <- "3.9.13"
+#install_python(version)
+#virtualenv_create("lakeflow_venv", version = version, requirements = "requirements.txt")
+#use_virtualenv("lakeflow_venv")
+
+#print("all packages successfully installed :)")
+
+# Set up the python virtual environment for reticulate
+#reticulate::virtualenv_create(
+#    envname="lakeflow_venv",
+#    requirements="requirements.txt"
+#)

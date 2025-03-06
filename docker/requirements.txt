@@ -1,0 +1,6 @@
+numpy==1.26.2
+pandas==2.2.3
+s3fs==2025.2.0
+xarray[io]==2024.7.0
+datetime
+geoglows==1.8.3
