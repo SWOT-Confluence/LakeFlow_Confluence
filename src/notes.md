@@ -172,5 +172,4 @@ RUN
 # Command to run a container from the image, give an rscript as a command, and bind the folders 
 # docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence,target=/app lakeflow Rscript src/docker_test.R
 
-
-
+docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence,target=/app lakeflow Rscript src/lakeflow_local_flexible.R

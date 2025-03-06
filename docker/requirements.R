@@ -1,4 +1,5 @@
 # Install packages
+install.packages("RNetCDF")
 install.packages("remotes")
 library(remotes)
 remotes:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE) 
@@ -31,6 +32,8 @@ install.packages("future.apply")
 library(future.apply)
 install.packages("reticulate")
 library(reticulate)
+install.packages('bit64')
+library(bit64)
 
 #version <- "3.9.13"
 #install_python(version)

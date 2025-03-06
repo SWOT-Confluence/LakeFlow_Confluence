@@ -4,11 +4,13 @@
 ################################################################################
 # set Path to Lakeflow_local folder. 
 ################################################################################
-inPath='C:/Users/kmcquil/Documents/LakeFlow_Confluence/'
+# inPath='C:/Users/kmcquil/Documents/LakeFlow_Confluence/'
+# Switch the inpath to reflect the docker container
+inPath='/app/'
 ################################################################################
 # Load Packages
 ################################################################################
-
+library(RNetCDF)
 library(foreign)
 library(lubridate)
 library(rstan)
@@ -26,6 +28,8 @@ library(future)
 library(future.apply)
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
+# Add in which python version to use 
+use_python("/usr/local/bin/python3.9")
 ################################################################################
 # Read in relevant files: Harmonized sword-pld, reservoirs of interest, swot lake data
 ################################################################################
@@ -38,7 +42,7 @@ updated_pld$continent = substr(updated_pld$lake_id, 1,1)
 # Read in lake data via hydrocron. 
 ################################################################################
 
-pull_lake_data = function(feature_id){
+pull_lake_data <- function(feature_id){
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=PriorLake&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=lake_id,time_str,wse,area_total,xovr_cal_q,partial_f,dark_frac,ice_clim_f')
   response = GET(website)
   pull = content(response, as='parsed')$results
@@ -53,7 +57,7 @@ batch_download_SWOT_lakes <- function(obs_ids){
   SWOT_data = future_lapply(unique(obs_ids),pull_lake_data)
   plan(sequential)
   return(SWOT_data)
-}
+} 
 
 #FIX ME: Note that I limited it to the first 100 lakes as an example. 
 files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')])[5:20]
@@ -836,6 +840,7 @@ lakeFlow = function(lake){
 #viable_locations = missing
 
 #Apply the LakeFlow code. - Could also be done using lapply but I like to see it print where I'm at.
+
 output_list = list()
 for(i in 1:nrow(viable_locations)){
   print(i)
@@ -845,5 +850,5 @@ lf_outputs = rbindlist(output_list[!is.na(output_list)])
 lf_outputs = lf_outputs[!is.na(lf_outputs$q_lakeflow),]
 
 
-i = 1
-lake = viable_locations$lake[i]
+#i = 1
+#lake = viable_locations$lake[i]
