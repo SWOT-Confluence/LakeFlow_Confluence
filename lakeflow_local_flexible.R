@@ -1,6 +1,8 @@
 ##LakeFlow code for running locally
 ##By: Ryan Riggs and George Allen, June 2024.
 
+##NEW COMMENT 3/18
+
 ##Hana notes: 
 #INPROGRESS: geoBAMr package? tried Craig's instructions but it's not working...
 #FIXED: dplyr doesn't have the right version (namespace ‘vctrs’ 0.6.3 is already loaded, but >= 0.6.4 is required). Just updated and it worked
