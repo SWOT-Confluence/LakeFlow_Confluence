@@ -1,15 +1,6 @@
 ################################################################################
-# This script downloads, cleans, and saves data to run lakeflow
+# This script downloads and saves data to run lakeflow
 ################################################################################
-
-################################################################################
-# Set args
-# arg[1] = number of workers to use to download swot data
-################################################################################
-args <- commandArgs(trailingOnly = TRUE)
-
-# Number of workers used to download SWOT data
-workers_ <- as.numeric(args[1])
 
 ################################################################################
 # Load libraries
@@ -31,10 +22,24 @@ library(future)
 library(future.apply)
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
-# Add in which python version to use 
+# Add in which python version to use with reticulate
 use_python("/usr/local/bin/python3.9")
 
 #use_virtualenv("r-reticulate")
+
+################################################################################
+# Set args
+# arg[1] = filepath to csv with lake ids to download data
+# arg[2] = number of workers to use to download swot data
+################################################################################
+args <- commandArgs(trailingOnly = TRUE)
+
+# Load csv of lake ids as a data.table
+lakes_input <- fread(args[1])
+lakes_input$lake <- as.character(lakes_input$lake)
+
+# Number of workers used to download SWOT data
+workers_ <- as.numeric(args[2])
 
 ################################################################################
 # Load datasets
@@ -226,10 +231,11 @@ extract_data_by_lake <- function(lake){
     # Add the ET data 
     et_lake = et[et$lake_id==lake,]
     if(nrow(et_lake)==0){
-        lakeObsOut$et = 0
+        lakeObs$et = 0
+    }else{
+      et_lake$month = as.numeric(et_lake$month)
+      lakeObs$et = et_lake$mean[match(lakeObs$month, et_lake$month)]
     }
-    et_lake$month = as.numeric(et_lake$month)
-    lakeObs$et = et_lake$mean[match(lakeObs$month, et_lake$month)]
 
     # add in tributary data:Either use geoglow (ts==TRUE or use GRADES-hydroDL mean monthly vals)
     if(use_ts_tributary==TRUE){
@@ -278,8 +284,8 @@ extract_data_by_lake <- function(lake){
 ################################################################################
 # Read in lake data via hydrocron
 ################################################################################
-files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')][5:20])
-#files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')])
+#files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')][5:20])
+files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$lake_id%in%lakes_input$lake])
 combined = rbindlist(files_filt[!is.na(files_filt)])
 
 ################################################################################
@@ -330,4 +336,7 @@ for(i in 1:nrow(viable_locations)){
 # Save a list of the lakes with data where we will run LakeFlow
 ################################################################################
 # Write out a list of the viable locations
-fwrite(viable_locations[,"lake"], "in/viable_locations.csv")
+dir.create("in/viable", showWarnings = FALSE)
+numbers <- gregexpr("[0-9]+", basename(args[1]))
+result <- unlist(regmatches(basename(args[1]), numbers))
+fwrite(viable_locations[,"lake"], paste0("in/viable/viable_locations", result, ".csv"))

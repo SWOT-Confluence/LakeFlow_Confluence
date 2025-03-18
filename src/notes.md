@@ -7,12 +7,12 @@
 
 ### Docker commands
 - docker build -t lakeflow .
-- docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence,target=/app lakeflow Rscript src/docker_test.R
-- docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence,target=/app lakeflow Rscript src/lakeflow_local_flexible.R
+- docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence_Dev,target=/app lakeflow Rscript src/docker_test.R
+- docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence_Dev,target=/app lakeflow Rscript src/lakeflow_local_flexible.R
 
-- docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence,target=/app lakeflow Rscript src/lakeflow_1.R 5
+- docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence_Dev,target=/app lakeflow Rscript src/lakeflow_1.R 5
 
-- docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence,target=/app lakeflow Rscript src/lakeflow_2.R "in/viable_locations.csv" 6
+- docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence_Dev,target=/app lakeflow Rscript src/lakeflow_2.R "in/viable_locations.csv" 6
 
 
 ### Steps to Convert the docker image to a singularity .sif
@@ -24,10 +24,16 @@ apptainer build lakeflow.sif docker://kmcquil/lakeflow:latest
 ### Singularity commands 
 - Here is the example command to run a .sif file 
 apptainer exec \
-    --pwd /projects/swot/kmcquil/LakeFlow_Confluence \
-    --bind /projects/swot/kmcquil/LakeFlow_Confluence \
+    --pwd /projects/swot/kmcquil/LakeFlow_Confluence_Dev \
+    --bind /projects/swot/kmcquil/LakeFlow_Confluence_Dev \
     --cleanenv \
-    /projects/swot/kmcquil/LakeFlow_Confluence/docker/lakeflow.sif Rscript src/lakeflow_1.R 5
+    /projects/swot/kmcquil/LakeFlow_Confluence_Dev/docker/lakeflow.sif Rscript src/lakeflow_1.R "in/lake_ids.csv" 5
+
+apptainer exec \
+    --pwd /projects/swot/kmcquil/LakeFlow_Confluence_Dev \
+    --bind /projects/swot/kmcquil/LakeFlow_Confluence_Dev \
+    --cleanenv \
+    /projects/swot/kmcquil/LakeFlow_Confluence_Dev/docker/lakeflow.sif Rscript src/lakeflow_2.R "in/viable_locations.csv" 6
 
 --pwd sets the working directory if it is different from the directory where you launch the script 
 --bind binds the outside directory with the inside directory. The format is [/source:/dest] but to bind to to the root then you can leave it blank 
