@@ -1,6 +1,33 @@
 ##LakeFlow code for running locally
 ##By: Ryan Riggs and George Allen, June 2024.
 
+##Hana notes: 
+#INPROGRESS: geoBAMr package? tried Craig's instructions but it's not working...
+#FIXED: dplyr doesn't have the right version (namespace ‘vctrs’ 0.6.3 is already loaded, but >= 0.6.4 is required). Just updated and it worked
+#FIXED?: various python errors. Changed package versions as suggested via google searches
+#In PROGRESS: R stan syntax is wrong...tried to change it and also tried downloading old version, but neither works
+#Can't download old package version...and can't figure out proper syntax
+#installation of package ‘C:/Users/hanat/AppData/Local/Temp/Rtmp0gfnO4/downloaded_packages/rstan_2.21.8.tar.gz’ had non-zero exit status
+
+##Test run:
+# 1st step: Trying on continent 5 (Oceania). Changed continent line and output line
+
+
+# Trying on continent 
+# 1: Africa
+# 2: Europe and Middle East
+# 3: Siberia
+# 4: Central/SE asia
+# 5: Oceania
+# 6: South America
+# 7: North America/Caribbean
+# 8: North American Arctic
+# 9: Greenland
+# code to grab every 5th lake... files_filt = files_filt[c(seq(1, length(files_filt), 5))]
+# output "viable_locations" df to get the lakes for your map
+
+
+# Second step: Forgot to change SOS priors file! Testing...
 ################################################################################
 # set Path to Lakeflow_local folder. 
 ################################################################################
@@ -28,8 +55,9 @@ library(future)
 library(future.apply)
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
-# Add in which python version to use 
-use_python("/usr/local/bin/python3.9")
+#Installing geoBAMr
+#devtools::install_github("berndbischl/BBmisc")
+#devtools:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE)
 ################################################################################
 # Read in relevant files: Harmonized sword-pld, reservoirs of interest, swot lake data
 ################################################################################
@@ -461,7 +489,7 @@ lakeFlow = function(lake){
   
   # Function to extract priors from SOS. 
   sos_pull = function(reach_id){
-    sos = paste0(inPath,"in/sos/constrained/na_sword_v15_SOS_priors.nc")
+    sos = paste0(inPath,"in/sos/constrained/af_sword_v15_SOS_priors.nc")  #na_sword_v15_SOS_priors.nc
     sos_outflow = RNetCDF::open.nc(sos)
     reach_grp <- RNetCDF::grp.inq.nc(sos_outflow, "reaches")$self
     reach_ids <- RNetCDF::var.get.nc(reach_grp, "reach_id")
@@ -830,7 +858,7 @@ lakeFlow = function(lake){
   
   output_df = bind_rows(inflow_outputs, outflow_outputs)
   output_df$prior_fit = sos_geobam
-  fwrite(output_df, paste0(inPath, '/out/lf_results_na_4/', lake, '.csv'))
+  fwrite(output_df, paste0(inPath, '/out/test_af_priors/', lake, '.csv')) #lf_results_na_4
   return(output_df)
 }
 
