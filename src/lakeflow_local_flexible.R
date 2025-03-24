@@ -4,7 +4,7 @@
 ################################################################################
 # set Path to Lakeflow_local folder. 
 ################################################################################
-# inPath='C:/Users/kmcquil/Documents/LakeFlow_Confluence/'
+# inPath='C:/Users/kmcquil/Documents/LakeFlow_Confluence_Dev/'
 # Switch the inpath to reflect the docker container
 inPath='/app/'
 ################################################################################
@@ -60,7 +60,8 @@ batch_download_SWOT_lakes <- function(obs_ids){
 } 
 
 #FIX ME: Note that I limited it to the first 100 lakes as an example. 
-files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')])[5:20]
+#files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')])
+files_filt = batch_download_SWOT_lakes(updated_pld[updated_pld$lake_id == "1140003043"]$lake_id)
 combined = rbindlist(files_filt[!is.na(files_filt)])
 ################################################################################
 # Filter lake data. 

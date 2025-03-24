@@ -37,10 +37,10 @@ args <- commandArgs(trailingOnly = TRUE)
 # Load csv of lake ids as a data.table
 lakes_input <- fread(args[1])
 lakes_input$lake <- as.character(lakes_input$lake)
-
+# lakes_input <- data.table(lake=c("1140003043"))
 # Number of workers used to download SWOT data
 workers_ <- as.numeric(args[2])
-
+#workers_1 <- 1
 ################################################################################
 # Load datasets
 ################################################################################
@@ -52,9 +52,11 @@ updated_pld$continent = substr(updated_pld$lake_id, 1,1)
 
 # Load ET dataset
 et = fread('in/ancillary/et.csv')
+et$lake_id <- as.character(et$lake_id)
 
 # Load tributary dataset
 tributary = fread('in/ancillary/tributaries.csv')
+tributary$lake_id <- as.character(tributary$lake_id)
 
 # Load geoglows dataset
 sword_geoglows = fread('in/ancillary/sword_geoglows.csv')
