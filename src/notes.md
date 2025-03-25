@@ -16,7 +16,9 @@
 ### Steps to Convert the docker image to a singularity .sif
 1. Push the image to docker hub through VS Code
 2. On HPC, use these commands to convert to a .sif
+
 module load containers/apptainer
+
 apptainer build lakeflow.sif docker://kmcquil/lakeflow:latest
 
 ### Singularity commands 
@@ -44,5 +46,7 @@ apptainer exec \
 ### Steps to run from start to finish 
 1. Run lake_ids.R to create N csv files with lists of lake ids to attempt to download data 
 2. Run lakeflow_1.R to download the data. This is parallelized with job array so that each of the N lists of lake ids is downloaded simultaneously. This script saves the data and also csvs of lake ids that are viable to run lakeflow. 
-3. Run a script to combine all csvs with lists of viable lakes into one and then break into N new csvs of equal size. 
-4. Run lakeflow_2.R to run lakeflow at each lake. This is parallelized with job array so that each of the N lists of lake ids is processed simultaneously. This script saves lakeflow outputs. 
+3. Run viable_ids.R combine all csvs with lists of viable lakes into one and then break into N new csvs of equal size. 
+4. Run lakeflow_2.R to run lakeflow at each lake. This is parallelized with job array so that each of the N lists of lake ids is processed simultaneously. This script saves lakeflow outputs.
+
+1140003043.out

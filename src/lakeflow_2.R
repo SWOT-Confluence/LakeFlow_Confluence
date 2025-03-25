@@ -36,6 +36,8 @@ lakes <- fread(args[1])
 #lakes <- fread("in/viable_locations.csv")
 lakes$lake <- as.character(lakes$lake)
 
+#lakes <- data.table(lake=c("1140003043"))
+
 # Set the number of cores that lakeflow will use
 cores = as.numeric(args[2])
 #cores <- 6
@@ -117,7 +119,7 @@ lakeFlow = function(lake){
     dn_df_list = split(dnObsOut, by='reach_id_d')
   
     # n days between observations. 
-    lakeObsOut$n_days = c(NA, as.numeric(diff(date(lakeObsOut$date_l))))
+    lakeObsOut$n_days = c(NA, as.numeric(diff(lakeObsOut$date_l)))
   
     # Remove first day from all dataframes bc dv is missing. 
     lakeObsOut = lakeObsOut[-1,]

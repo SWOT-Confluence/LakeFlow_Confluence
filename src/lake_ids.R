@@ -1,6 +1,6 @@
 ################################################################################
 # This script creates a csv of the lake ids to download data for lakeflow
-# and sets up the config file to use those csvs with slurm job array
+# and sets up the saved filepaths to be compatible with job array
 ################################################################################
 # Load module
 library(data.table)
