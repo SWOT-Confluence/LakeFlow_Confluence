@@ -9,7 +9,7 @@ RUN pip install --upgrade setuptools
 WORKDIR /app
 
 # Set up python 
-COPY * .
+COPY requirements.txt .
 RUN pip install -r requirements.txt
 RUN pip install zarr==2.18.2
 
@@ -88,4 +88,7 @@ RUN apt-get update \
 COPY requirements.R .
 RUN Rscript requirements.R
 
-RUN
+LABEL version="1.0" \
+	description="Containerized lakeflow module." \
+	"algorithm.contact"="??"
+ENTRYPOINT [ "/usr/bin/Rscript",  "/app/src/lakeflow_deploy.R" ]
