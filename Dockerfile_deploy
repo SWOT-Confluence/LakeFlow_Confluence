@@ -1,5 +1,5 @@
 # Start from python image
-FROM python:3.9
+FROM python:3.9 AS STAGE_0
 
 # Update/install all necessary ubuntu stuff
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential
@@ -88,7 +88,13 @@ RUN apt-get update \
 COPY requirements.R .
 RUN Rscript requirements.R
 
+FROM STAGE_0 as STAGE_1
+#move all the scripts needed
+COPY /src/lakeflow_deploy.R .
+RUN mkdir ./src
+COPY /src/lakeflow_stan_flexible.stan ./src
+
 LABEL version="1.0" \
 	description="Containerized lakeflow module." \
 	"algorithm.contact"="??"
-ENTRYPOINT [ "/usr/bin/Rscript",  "/app/src/lakeflow_deploy.R" ]
+ENTRYPOINT [ "/usr/bin/Rscript",  "/app/lakeflow_deploy.R" ]
