@@ -23,11 +23,27 @@
 
 ### Travis lakeflow input update:
 
-- Moved all this to a README
+- Created README
 - reanamed lakeflow_1 to lakflow_input and lakeflow_2 to lakeflow_deploy
 - moved dockerfiles to top of the repo
 - created two dockerfiles one for input and one for deployment with entrypoints
 - added new indir argument
 - replaced all 'in' filepaths with indir argument
 - Updated dockerfile to copy in scripts for entrypoint
-- updated argument handling by adding optparse
+- updated argument handling by using optparse
+- added optparse to requirement.R
+
+### Travis lakeflow deploy update:
+- Updated dockerfile to be in line with lakeflow input
+- updated argument handling to opptparse
+- added new argument to point to the directory holding the sos
+
+### To do for AWS Deployment
+- add index argument
+- update output netcdf
+- make lake sets / in 'lakeflow input' module after Ryan sends upstreea/downstream code
+- find what data lakeflow is using that is already available in confluencce
+    - dx area
+- add a flag that saves or doesn't save intermediate data
+- setup EFS for Lakeflow
+- Setup bath compute environment for lakeflow
