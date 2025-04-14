@@ -39,7 +39,18 @@
 - added new argument to point to the directory holding the sos
 
 ### To do for AWS Deployment
-- add index argument
+- aded index argument 
+- added a IAM policy to ecstaskececutionrole:
+
+{
+  "Effect": "Allow",
+  "Action": ["s3:GetObject", "s3:ListBucket"],
+  "Resource": [
+    "arn:aws:s3:::geoglows-v2-retrospective",
+    "arn:aws:s3:::geoglows-v2-retrospective/*"
+  ]
+}
+
 - update output netcdf
 - make lake sets / in 'lakeflow input' module after Ryan sends upstreea/downstream code
 - find what data lakeflow is using that is already available in confluencce

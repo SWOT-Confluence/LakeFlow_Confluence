@@ -37,7 +37,8 @@ use_python("/usr/local/bin/python3.9")
 option_list <- list(
     make_option(c("-c", "--input_file"), type = "character", default = NULL, help = "filepath to csv with lake ids to download data"),
     make_option(c("-w", "--workers"), type = "integer", default = NULL, help = "number of workers to use to download swot data"),
-    make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files")
+    make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files"),
+    make_option(c("--index"), type = "integer", default = NULL , help = "Chooses what lake to process from input file, if -256 it usese AWS array number")
   )
 ################################################################################
 
@@ -45,9 +46,16 @@ option_list <- list(
 opt_parser <- OptionParser(option_list = option_list)
 opts <- parse_args(opt_parser)
 
+# Set index, use aws array if index is -256 (ascii code for AWS)
+index <- opts$index + 1
+if (index == -256){
+  index <- strtoi(Sys.getenv("AWS_BATCH_JOB_ARRAY_INDEX")) + 1
+}
+
 # Load csv of lake ids as a data.table
 lakes_input <- fread(opts$input_file)
-lakes_input$lake <- as.character(lakes_input$lake)
+# lakes_input <- lakes_input[index]
+lakes_input$lake <- as.character(lakes_input$lake_id)
 
 # Number of workers used to download SWOT data
 workers_ <- opts$workers
@@ -82,8 +90,10 @@ dir.create(file.path(indir, "/clean"), showWarnings = FALSE)
 ################################################################################
 
 pull_lake_data <- function(feature_id){
+  print("pulling lake data")
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=PriorLake&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=lake_id,time_str,wse,area_total,xovr_cal_q,partial_f,dark_frac,ice_clim_f')
   response = GET(website)
+  print(content(response))
   pull = content(response, as='parsed')$results
   data = try(read.csv(textConnection(pull$csv), sep=','))
   if(is.error(data)){return(NA)}
@@ -92,13 +102,16 @@ pull_lake_data <- function(feature_id){
 }
 
 batch_download_SWOT_lakes <- function(obs_ids){
+  print("batch downloading swot lakes")
   plan(multisession, workers = workers_)
   SWOT_data = future_lapply(unique(obs_ids),pull_lake_data)
   plan(sequential)
+  print("finished batch downloading swot lakes")
   return(SWOT_data)
 } 
 
 pull_data <- function(feature_id){
+  print("pulling data")
   # Function to pull swot reach data using hydrocron
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=Reach&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=reach_id,time_str,wse,width,slope,slope2,d_x_area,area_total,reach_q,p_width,xovr_cal_q,partial_f,dark_frac,ice_clim_f,wse_r_u,slope_r_u,reach_q_b')
   response = GET(website)
@@ -110,6 +123,7 @@ pull_data <- function(feature_id){
 }
 
 batch_download_SWOT <- function(obs_ids){
+  print("batch downloading swot")
   # Batch download swot river reaches 
   plan(multisession, workers = workers_)
   SWOT_data = future_lapply(unique(obs_ids),pull_data)
@@ -118,6 +132,7 @@ batch_download_SWOT <- function(obs_ids){
 }
 
 tukey_test = function(ts){
+  print("running tukey")
   # Turkey test for removing outliers
   wseIQR = quantile(ts$wse, c(.25, .75))
   wseT_l = wseIQR[1] - (diff(wseIQR)*1.5)
@@ -136,6 +151,7 @@ tukey_test = function(ts){
 }
 
 tukey_test_lake = function(ts){
+  print("running tukey lake")
   # Turkey test for removing outliers 
   wseIQR = quantile(ts$wse, c(.25, .75))
   wseT_l = wseIQR[1] - (diff(wseIQR)*1.5)
@@ -146,6 +162,7 @@ tukey_test_lake = function(ts){
 }
 
 filter_function = function(swot_ts){
+  print("filtering")
   # Function to filter swot reach data
   # Allowing partial obs to see if it degrades performances. 
   #dawg_filter = tukey_test(swot_ts[swot_ts$time_str!='no_data'&swot_ts$ice_clim_f<2&swot_ts$dark_frac<=0.5&swot_ts$xovr_cal_q<2&!is.na(swot_ts$slope2)&!is.infinite(swot_ts$slope2)&swot_ts$slope2>0&swot_ts$width>0,])
@@ -156,6 +173,7 @@ filter_function = function(swot_ts){
 }
 
 combining_lk_rv_obs = function(lake){
+  print("combining lake and river obs")
   #Pull in SWOT river data and subset predownloaded SWOT lake data. 
   upID = unlist(strsplit(updated_pld$U_reach_id[updated_pld$lake_id==lake], ','))
   dnID = unlist(strsplit(updated_pld$D_reach_id[updated_pld$lake_id==lake], ','))
@@ -206,6 +224,7 @@ combining_lk_rv_obs = function(lake){
 }
 
 download_tributary = function(reaches, start_date='01-01-2023'){
+  print("downloading tribs")
   # Function to pull tributary inflow Q estimates from Geoglows. 
   source_python('src/geoglows_aws_pull.py')
   tributary_flow = pull_tributary(reach_id = reaches, start_date=start_date)
@@ -217,6 +236,7 @@ download_tributary = function(reaches, start_date='01-01-2023'){
 
 
 pull_geoglows = function(reaches, start_date='01-01-2023'){
+  print("pulling geoglows")
   # Function to pull geoglows data for prior purposes
   source_python('src/geoglows_aws_pull.py')
   model_flow = pull_tributary(reach_id = reaches, start_date=start_date)
@@ -226,6 +246,8 @@ pull_geoglows = function(reaches, start_date='01-01-2023'){
 
 
 extract_data_by_lake <- function(lake, indir){
+  print("extracting data by lake"
+  )
     
     # Use dynamic prior Q. False = SOS prior estimate from GRADES / MAF geoglows
     use_ts_prior=TRUE
@@ -328,6 +350,10 @@ lakeFilt = lakeFilt[lake_id%in%lakes,]
 up_reaches = unlist(strsplit(updated_pld$U_reach_id[updated_pld$lake_id%in%lakes], ','))
 dn_reaches = unlist(strsplit(updated_pld$D_reach_id[updated_pld$lake_id%in%lakes], ','))
 reaches = c(up_reaches, dn_reaches)
+if (is.null(reaches) || length(reaches) == 0){
+  message("No reaches found, exiting....")
+  quit(save = "no", status = 0)
+}
 swot_river_pull = batch_download_SWOT(reaches)
 swot_river_filt = lapply(swot_river_pull[!is.na(swot_river_pull)], filter_function)
 swot_river = rbindlist(swot_river_filt)
@@ -342,7 +368,13 @@ viable_locations = n_obs_lake[obs>=3,] #Note this 3 is for ensuring an inflow, l
 ################################################################################
 # Go lake by lake and attach ET and tributary data and save datasets
 ################################################################################
+if (nrow(viable_locations) == 0){
+  message("Did not find viable lake, exiting....")
+  quit(save = "no", status = 0)
+}
+
 for(i in 1:nrow(viable_locations)){
+  print(viable_locations)
     extract_data_by_lake(viable_locations$lake[i], indir)
 }
 
@@ -353,4 +385,9 @@ for(i in 1:nrow(viable_locations)){
 dir.create(file.path(indir, "viable"), showWarnings = FALSE)
 numbers <- gregexpr("[0-9]+", basename(opts$input_file))
 result <- unlist(regmatches(basename(opts$input_file), numbers))
-fwrite(viable_locations[,"lake"], file.path(indir, paste0("viable/viable_locations", result, ".csv")))
+fwrite(viable_locations[,"lake"], file.path(indir, paste0("viable/viable_locations", index, ".csv")))
+print('Found viable lake...')
+
+
+
+
