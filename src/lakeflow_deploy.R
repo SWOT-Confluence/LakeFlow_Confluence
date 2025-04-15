@@ -35,7 +35,8 @@ option_list <- list(
     make_option(c("-s", "--sos_dir"), type = "character", default = NULL, help = "filepath for the sos"),
     make_option(c("-w", "--workers"), type = "integer", default = NULL, help = "number of cores for lakeflow to use"),
     make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files"),
-    make_option(c("-o", "--outdir"), type = "character", default = NULL , help = "directory with input files")
+    make_option(c("-o", "--outdir"), type = "character", default = NULL , help = "directory to output results"),
+    make_option(c("--index"), type = "integer", default = NULL, help = "index of what lake to process in the input file if blank process whole file")
   )
 ################################################################################
 
@@ -60,6 +61,18 @@ sos_dir <- opts$sos_dir
 
 # Path that you write to
 outdir <- opts$outdir
+
+# Set index, use aws array if index is -256 (ascii code for AWS)
+index <- opts$index
+
+if (!(is.null(index))){
+    if (index == -256){
+    index <- strtoi(Sys.getenv("AWS_BATCH_JOB_ARRAY_INDEX")) + 1
+    }
+    else{
+        index <- index + 1
+    }
+}
 
 ################################################################################
 # Load datasets 
@@ -550,7 +563,13 @@ lakeFlow = function(lake){
 # Apply lakeflow to the list of lakes
 ################################################################################
 
-for(i in 1:nrow(lakes)){
-  lakeFlow(lakes$lake[i])
+if (is.null(index)){
+    lake_data <- lakes  
+}else{
+    lake_data <- lakes[index, , drop = FALSE]
+}
+
+for(i in 1:nrow(lake_data)){
+  lakeFlow(lake_data$lake[i])
 }
 
