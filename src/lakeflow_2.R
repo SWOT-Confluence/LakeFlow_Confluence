@@ -49,6 +49,8 @@ lakes <- fread(opts$input_file)
 #lakes <- fread("viable_locations.csv")
 lakes$lake <- as.character(lakes$lake)
 
+#lakes <- data.table(lake=c("1140003043"))
+
 # Set the number of cores that lakeflow will use
 cores = as.numeric(opts$workers)
 #cores <- 6
@@ -81,9 +83,6 @@ if (!(is.null(index))){
 updated_pld = fread(file.path(indir,"SWORDv16_PLDv103_wo_ghost_rch.csv"))
 updated_pld$lake_id =  as.character(updated_pld$lake_id)
 updated_pld$continent = substr(updated_pld$lake_id, 1,1)
-
-sos = file.path(sos_dir, "na_sword_v16_SOS_priors.nc") ### THIS NEEDS TO BE CHANGED TO RESPECT DIF CONTINETINENTS
-sos_outflow = RNetCDF::open.nc(sos)
 
 sword_geoglows = fread(file.path(indir,'ancillary/sword_geoglows.csv'))
 sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
@@ -152,7 +151,7 @@ lakeFlow = function(lake){
     dn_df_list = split(dnObsOut, by='reach_id_d')
   
     # n days between observations. 
-    lakeObsOut$n_days = c(NA, as.numeric(diff(date(lakeObsOut$date_l))))
+    lakeObsOut$n_days = c(NA, as.numeric(diff(lakeObsOut$date_l)))
   
     # Remove first day from all dataframes bc dv is missing. 
     lakeObsOut = lakeObsOut[-1,]
@@ -206,6 +205,21 @@ lakeFlow = function(lake){
     sos_pull = function(reach_id){
         #sos = "sos/constrained/na_sword_v15_SOS_priors.nc"
         #sos_outflow = RNetCDF::open.nc(sos)
+        #sos = "in/sos/constrained/na_sword_v15_SOS_priors.nc"
+        if (updated_pld$continent[updated_pld$lake_id==lake] == 1) {
+          sos = file.path(sos_dir, "af_sword_v16_SOS_priors.nc")
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 2) {
+          sos = file.path(sos_dir, "eu_sword_v16_SOS_priors.nc")
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 3) {
+          sos = file.path(sos_dir, "as_sword_v16_SOS_priors.nc")
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 4) {
+          sos = file.path(sos_dir, "as_sword_v16_SOS_priors.nc")
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 5) {
+          sos = file.path(sos_dir, "oc_sword_v16_SOS_priors.nc")
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 6) {
+          sos = file.path(sos_dir, "sa_sword_v16_SOS_priors.nc")
+        } else {sos = file.path(sos_dir, "na_sword_v16_SOS_priors.nc")} #Sets NA priors for continents 7, 8, and 9
+        sos_outflow = RNetCDF::open.nc(sos)
         reach_grp <- RNetCDF::grp.inq.nc(sos_outflow, "reaches")$self
         reach_ids <- RNetCDF::var.get.nc(reach_grp, "reach_id")
         index <- which(reach_ids==reach_id, arr.ind=TRUE)
