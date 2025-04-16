@@ -21,36 +21,71 @@ library(reticulate)
 library(geoBAMr)
 library(future)
 library(future.apply)
+library(optparse)
 '%!in%' <- function(x,y)!('%in%'(x,y))
+
+# Example Deployment
+
+# docker run -v /mnt/lakeflow:/data/input -v /mnt/input/sos:/sos/input lakeflow_deploy -c /data/input/viable/viable_locations1.csv -s /sos/input -w 1 -i /data/input -o /data/input/out
 
 ################################################################################
 # Set args
-# args[1] = filepath for a list of lakes to run lakeflow
-# args[2] = number of cores for lakeflow to use
+option_list <- list(
+    make_option(c("-c", "--input_file"), type = "character", default = NULL, help = "filepath for a list of lakes to run lakeflow"),
+    make_option(c("-s", "--sos_dir"), type = "character", default = NULL, help = "filepath for the sos"),
+    make_option(c("-w", "--workers"), type = "integer", default = NULL, help = "number of cores for lakeflow to use"),
+    make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files"),
+    make_option(c("-o", "--outdir"), type = "character", default = NULL , help = "directory to output results"),
+    make_option(c("--index"), type = "integer", default = NULL, help = "index of what lake to process in the input file if blank process whole file")
+  )
 ################################################################################
-args <- commandArgs(trailingOnly = TRUE)
-print(args)
+
+# Grab arguments
+opt_parser <- OptionParser(option_list = option_list)
+opts <- parse_args(opt_parser)
 
 # Load a df of lakes where lakeflow will be run
-lakes <- fread(args[1])
-#lakes <- fread("in/viable_locations.csv")
+lakes <- fread(opts$input_file)
+#lakes <- fread("viable_locations.csv")
 lakes$lake <- as.character(lakes$lake)
 
 # Set the number of cores that lakeflow will use
-cores = as.numeric(args[2])
+cores = as.numeric(opts$workers)
 #cores <- 6
+
+# Path that holds input data, was previously 'in'
+indir <- opts$indir
+
+# Path that holds sos
+sos_dir <- opts$sos_dir
+
+# Path that you write to
+outdir <- opts$outdir
+
+# Set index, use aws array if index is -256 (ascii code for AWS)
+index <- opts$index
+
+if (!(is.null(index))){
+    if (index == -256){
+    index <- strtoi(Sys.getenv("AWS_BATCH_JOB_ARRAY_INDEX")) + 1
+    }
+    else{
+        index <- index + 1
+    }
+}
+
 ################################################################################
 # Load datasets 
 ################################################################################
 
-updated_pld = fread("in/SWORDv16_PLDv103_wo_ghost_rch.csv")
+updated_pld = fread(file.path(indir,"SWORDv16_PLDv103_wo_ghost_rch.csv"))
 updated_pld$lake_id =  as.character(updated_pld$lake_id)
 updated_pld$continent = substr(updated_pld$lake_id, 1,1)
 
-sos = "in/sos/constrained/na_sword_v15_SOS_priors.nc"
+sos = file.path(sos_dir, "na_sword_v16_SOS_priors.nc") ### THIS NEEDS TO BE CHANGED TO RESPECT DIF CONTINETINENTS
 sos_outflow = RNetCDF::open.nc(sos)
 
-sword_geoglows = fread('in/ancillary/sword_geoglows.csv')
+sword_geoglows = fread(file.path(indir,'ancillary/sword_geoglows.csv'))
 sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
 
 ################################################################################
@@ -65,10 +100,10 @@ lakeFlow = function(lake){
     # Use modeled daily tributary flows. False = mean monthly grades tributaries / MAF geoglows
     use_ts_tributary=TRUE
 
-    lakeObs <- fread(paste0("in/clean/lakeobs_", lake, ".csv"))
-    upObs <- fread(paste0("in/clean/upobs_", lake, ".csv"))
+    lakeObs <- fread(file.path(indir, paste0("clean/lakeobs_", lake, ".csv")))
+    upObs <- fread(file.path(indir, paste0("clean/upobs_", lake, ".csv")))
     upObs$reach_id <- as.character(upObs$reach_id)
-    dnObs <- fread(paste0("in/clean/dnobs_", lake, ".csv"))
+    dnObs <- fread(file.path(indir, paste0("clean/dnobs_", lake, ".csv")))
     dnObs$reach_id <- as.character(dnObs$reach_id)
     
     upID = unlist(strsplit(updated_pld$U_reach_id[updated_pld$lake_id==lake], ','))
@@ -169,7 +204,7 @@ lakeFlow = function(lake){
   
     # Function to extract priors from SOS. 
     sos_pull = function(reach_id){
-        #sos = "in/sos/constrained/na_sword_v15_SOS_priors.nc"
+        #sos = "sos/constrained/na_sword_v15_SOS_priors.nc"
         #sos_outflow = RNetCDF::open.nc(sos)
         reach_grp <- RNetCDF::grp.inq.nc(sos_outflow, "reaches")$self
         reach_ids <- RNetCDF::var.get.nc(reach_grp, "reach_id")
@@ -290,14 +325,14 @@ lakeFlow = function(lake){
   
     # Pull in Modeled timeseries as prior Q rather than mean: #Updating alternative to using static Geoglows mean annual flow. 
     if(use_ts_prior==TRUE){
-        #sword_geoglows = fread(paste0(inPath, '/in/ancillary/sword_geoglows.csv'))
+        #sword_geoglows = fread(paste0(inPath, '/ancillary/sword_geoglows.csv'))
         sword_reaches = c(upID, dnID)
         #sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
         sword_geoglows_filt = sword_geoglows[sword_geoglows$reach_id%in%sword_reaches,c('reach_id','LINKNO')]
         geoglows_reaches = unique(as.list(sword_geoglows$LINKNO[sword_geoglows$reach_id%in%sword_reaches]))
         # Pull in modeled geoglows data. 
         #model_data = pull_geoglows(geoglows_reaches, '01-01-1940')
-        model_data <- fread(paste0("in/clean/geoglows_", lake, ".csv"))
+        model_data <- fread(file.path(indir,paste0("clean/geoglows_", lake, ".csv")))
         model_data$Date <- as.Date(model_data$Date)
         # Convert bad Q to NA. 
         ind = ncol(model_data)-1
@@ -337,14 +372,14 @@ lakeFlow = function(lake){
         dn_sos_stan$qHat_d = dn_qhat
     
     }else{
-        #sword_geoglows = fread(paste0(inPath, '/in/ancillary/sword_geoglows.csv'))
+        #sword_geoglows = fread(paste0(inPath, '/ancillary/sword_geoglows.csv'))
         sword_reaches = c(upID, dnID)
         #sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
         sword_geoglows_filt = sword_geoglows[sword_geoglows$reach_id%in%sword_reaches,c('reach_id','LINKNO')]
         geoglows_reaches = unique(as.list(sword_geoglows$LINKNO[sword_geoglows$reach_id%in%sword_reaches]))
         # Pull in modeled geoglows data. 
         #model_data = pull_geoglows(geoglows_reaches, '01-01-1940')
-        model_data <- fread(paste0("in/clean/geoglows_", lake, ".csv"))
+        model_data <- fread(file.path(indir,paste0("clean/geoglows_", lake, ".csv")))
         model_data$Date <- as.Date(model_data$Date)
         # Convert bad Q to NA. 
         ind = ncol(model_data)-1
@@ -517,7 +552,7 @@ lakeFlow = function(lake){
   
     output_df = bind_rows(inflow_outputs, outflow_outputs)
     output_df$prior_fit = sos_geobam
-    fwrite(output_df, paste0('out/lf_results_na_4/', lake, '.csv'))
+    fwrite(output_df, file.path(outdir, paste0(lake, '.csv')))
 
     return()
 
@@ -528,7 +563,13 @@ lakeFlow = function(lake){
 # Apply lakeflow to the list of lakes
 ################################################################################
 
-for(i in 1:nrow(lakes)){
-  lakeFlow(lakes$lake[i])
+if (is.null(index)){
+    lake_data <- lakes  
+}else{
+    lake_data <- lakes[index, , drop = FALSE]
+}
+
+for(i in 1:nrow(lake_data)){
+  lakeFlow(lake_data$lake[i])
 }
 
