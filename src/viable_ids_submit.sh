@@ -16,7 +16,7 @@
 
 module load containers/apptainer
 apptainer exec \
-    --pwd /projects/swot/kmcquil/LakeFlow_Confluence_Dev \
-    --bind /projects/swot/kmcquil/LakeFlow_Confluence_Dev \
+    --pwd /projects/swot/hana/LakeFlow_Confluence \
+    --bind /projects/swot/hana/LakeFlow_Confluence \
     --cleanenv \
-    /projects/swot/kmcquil/LakeFlow_Confluence_Dev/docker/lakeflow.sif Rscript src/viable_ids.R
+    /projects/swot/hana/LakeFlow_Confluence/lakeflow.sif Rscript src/viable_ids.R

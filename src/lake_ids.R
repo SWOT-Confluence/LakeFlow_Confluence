@@ -13,8 +13,8 @@ updated_pld$continent <- substr(updated_pld$lake_id, 1,1)
 # Create a folder to store the lake id csvs
 dir.create("in/lakeids", showWarnings = FALSE)
 
-# Break into 20 separate chunks
-n <- 20
+# Break into 50 separate chunks
+n <- 50
 breaks <- round(seq(from=1, to=nrow(updated_pld), length.out=(n+1)))
 for(i in 1:n){
     dt <- updated_pld[breaks[i]:breaks[i+1],]

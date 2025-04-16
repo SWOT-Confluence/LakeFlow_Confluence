@@ -49,8 +49,8 @@ updated_pld = fread("in/SWORDv16_PLDv103_wo_ghost_rch.csv")
 updated_pld$lake_id =  as.character(updated_pld$lake_id)
 updated_pld$continent = substr(updated_pld$lake_id, 1,1)
 
-sos = "in/sos/constrained/na_sword_v15_SOS_priors.nc"
-sos_outflow = RNetCDF::open.nc(sos)
+#sos = "in/sos/constrained/na_sword_v15_SOS_priors.nc"
+#sos_outflow = RNetCDF::open.nc(sos)
 
 sword_geoglows = fread('in/ancillary/sword_geoglows.csv')
 sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
@@ -172,7 +172,20 @@ lakeFlow = function(lake){
     # Function to extract priors from SOS. 
     sos_pull = function(reach_id){
         #sos = "in/sos/constrained/na_sword_v15_SOS_priors.nc"
-        #sos_outflow = RNetCDF::open.nc(sos)
+        if (updated_pld$continent[updated_pld$lake_id==lake] == 1) {
+          sos = "in/sos/constrained/af_sword_v15_SOS_priors.nc"
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 2) {
+          sos = "in/sos/constrained/eu_sword_v15_SOS_priors.nc"
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 3) {
+          sos = "in/sos/constrained/as_sword_v15_SOS_priors.nc"
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 4) {
+          sos = "in/sos/constrained/as_sword_v15_SOS_priors.nc"
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 5) {
+          sos = "in/sos/constrained/oc_sword_v15_SOS_priors.nc"
+        } else if (updated_pld$continent[updated_pld$lake_id==lake] == 6) {
+          sos = "in/sos/constrained/sa_sword_v15_SOS_priors.nc"
+        } else {sos = "in/sos/constrained/na_sword_v15_SOS_priors.nc"} #Sets NA priors for continents 7, 8, and 9
+        sos_outflow = RNetCDF::open.nc(sos)
         reach_grp <- RNetCDF::grp.inq.nc(sos_outflow, "reaches")$self
         reach_ids <- RNetCDF::var.get.nc(reach_grp, "reach_id")
         index <- which(reach_ids==reach_id, arr.ind=TRUE)

@@ -9,9 +9,10 @@ library(data.table)
 files <- Sys.glob("in/viable/viable_locations*.csv")
 lakes <- rbindlist(lapply(files, fread))
 colnames(lakes) <- "lake"
+print(nrow(lakes))
 
 # Break into 20 separate chunks
-n <- 20
+n <- 30
 breaks <- round(seq(from=1, to=nrow(lakes), length.out=(n+1)))
 for(i in 1:n){
     dt <- lakes[breaks[i]:breaks[i+1],]
