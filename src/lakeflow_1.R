@@ -143,12 +143,65 @@ filter_function = function(swot_ts){
   return(dawg_filter)
 }
 
+# Ryan's updated code to get data from farther up/downstream reaches
 combining_lk_rv_obs = function(lake){
   #Pull in SWOT river data and subset predownloaded SWOT lake data. 
   upID = unlist(strsplit(updated_pld$U_reach_id[updated_pld$lake_id==lake], ','))
   dnID = unlist(strsplit(updated_pld$D_reach_id[updated_pld$lake_id==lake], ','))
   upObs_all = swot_river[swot_river$reach_id%in%upID,]
   dnObs_all = swot_river[swot_river$reach_id%in%dnID,]
+  
+  #Allow downstream reaches to shift one reach downstream.
+  n_ds_reaches = updated_pld$D_reach_n[updated_pld$lake_id==lake]
+  n_ds_reaches_obs = dnObs_all[,.N,by=reach_id]
+  missing_dn = dnID[dnID%!in%n_ds_reaches_obs$reach_id]
+  shift_a_reach_away = function(f){
+    n_alt_ds_reaches = sword$n_rch_dn[sword$reach_id==f]
+    if(n_alt_ds_reaches==1){
+      alt_ds_reach = sword$rch_id_dn[sword$reach_id==f]
+      dn_river_pull = try(lapply(alt_ds_reach,pull_data))
+      dn_river_filt = lapply(dn_river_pull[!is.na(dn_river_pull)], filter_function)
+      dnObs_alt = rbindlist(dn_river_filt)
+      dnObs_alt$time=as_datetime(dnObs_alt$time_str)
+      dnObs_alt$reach_id_original = dnObs_alt$reach_id
+      dnObs_alt$reach_id = f
+      dnObs_alt$shifted = 'yes'
+      if(nrow(dnObs_alt)>0){
+        return(dnObs_alt)
+      }
+    }
+  }
+  
+  additional_ds_obs = rbindlist(lapply(missing_dn, shift_a_reach_away))
+  dnObs_all = bind_rows(dnObs_all, additional_ds_obs)
+  dn_shifted = any(dnObs_all$shifted=='yes')
+  
+  #Allow upstream reaches to shift one reach upstream.
+  n_us_reaches = updated_pld$D_reach_n[updated_pld$lake_id==lake]
+  n_us_reaches_obs = upObs_all[,.N,by=reach_id]
+  missing_up = upID[upID%!in%n_us_reaches_obs$reach_id]
+  shift_a_reach_up = function(f){
+    n_alt_us_reaches = sword$n_rch_up[sword$reach_id==f]
+    if(n_alt_us_reaches==1){
+      alt_us_reach = sword$rch_id_up[sword$reach_id==f]
+      up_river_pull = try(lapply(alt_us_reach,pull_data))
+      up_river_filt = lapply(up_river_pull[!is.na(up_river_pull)], filter_function)
+      upObs_alt = rbindlist(up_river_filt)
+      upObs_alt$time=as_datetime(upObs_alt$time_str)
+      upObs_alt$reach_id_original = upObs_alt$reach_id
+      upObs_alt$reach_id = f
+      upObs_alt$shifted = 'yes'
+      if(nrow(upObs_alt)>0){
+        return(upObs_alt)
+      }
+    }
+  }
+  
+  additional_us_obs = rbindlist(lapply(missing_up, shift_a_reach_up))
+  upObs_all = bind_rows(upObs_all, additional_us_obs)
+  up_shifted = any(upObs_all$shifted=='yes')
+  
+  
   lakeObs_all = lakeFilt[lakeFilt$lake_id==lake,]
   lakeObs_all$time = as_datetime(lakeObs_all$time_str)
   
@@ -187,6 +240,9 @@ combining_lk_rv_obs = function(lake){
   
   upObs = upObs[order(upObs$reach_id),]
   dnObs = dnObs[order(dnObs$reach_id),]
+  
+  upObs$shifted = up_shifted
+  dnObs$shifted = dn_shifted
   
   if(nrow(lakeObs)<4){return(NA)}
   output = list(lakeObs, upObs, dnObs)
