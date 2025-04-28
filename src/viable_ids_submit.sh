@@ -3,7 +3,7 @@
 ###########################################################################
 ## environment & variable setup
 ####### job customization
-#SBATCH --job-name ids
+#SBATCH --job-name viable
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
@@ -19,4 +19,4 @@ apptainer exec \
     --pwd /projects/swot/hana/LakeFlow_Confluence \
     --bind /projects/swot/hana/LakeFlow_Confluence \
     --cleanenv \
-    /projects/swot/hana/LakeFlow_Confluence/lakeflow.sif Rscript src/lake_ids.R
+    /projects/swot/hana/LakeFlow_Confluence/lakeflow.sif Rscript src/viable_ids.R
