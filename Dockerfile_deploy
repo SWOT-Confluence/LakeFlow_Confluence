@@ -90,11 +90,11 @@ RUN Rscript requirements.R
 
 FROM STAGE_0 as STAGE_1
 #move all the scripts needed
-COPY /src/lakeflow_deploy.R .
+COPY /src/lakeflow_2.R .
 RUN mkdir ./src
 COPY /src/lakeflow_stan_flexible.stan ./src
 
 LABEL version="1.0" \
 	description="Containerized lakeflow module." \
 	"algorithm.contact"="??"
-ENTRYPOINT [ "/usr/bin/Rscript",  "/app/lakeflow_deploy.R" ]
+ENTRYPOINT [ "/usr/bin/Rscript",  "/app/lakeflow_2.R" ]

@@ -90,7 +90,7 @@ RUN Rscript requirements.R
 
 FROM STAGE_0 as STAGE_1
 #move all the scripts needed
-COPY /src/lakeflow_input.R .
+COPY /src/lakeflow_1.R .
 RUN mkdir ./src
 COPY /src/geoglows_aws_pull.py ./src
 
@@ -98,4 +98,4 @@ COPY /src/geoglows_aws_pull.py ./src
 LABEL version="1.0" \
 	description="Containerized lakeflow module." \
 	"algorithm.contact"="??"
-ENTRYPOINT [ "/usr/bin/Rscript",  "/app/lakeflow_input.R" ]
+ENTRYPOINT [ "/usr/bin/Rscript",  "/app/lakeflow_1.R" ]
