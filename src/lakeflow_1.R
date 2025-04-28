@@ -37,8 +37,9 @@ use_python("/usr/local/bin/python3.9")
 option_list <- list(
     make_option(c("-c", "--input_file"), type = "character", default = NULL, help = "filepath to csv with lake ids to download data"),
     make_option(c("-w", "--workers"), type = "integer", default = NULL, help = "number of workers to use to download swot data"),
-    make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files"),
-    make_option(c("--index"), type = "integer", default = NULL , help = "Chooses what lake to process from input file, if -256 it usese AWS array number")
+    make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files")
+    ## I had an index argument, but the script is actually faster in seriel instead of calling hydrocron in parallel
+    # make_option(c("--index"), type = "integer", default = NULL , help = "Chooses what lake to process from input file, if -256 it usese AWS array number")
   )
 ################################################################################
 
@@ -46,11 +47,11 @@ option_list <- list(
 opt_parser <- OptionParser(option_list = option_list)
 opts <- parse_args(opt_parser)
 
-# Set index, use aws array if index is -256 (ascii code for AWS)
-index <- opts$index + 1
-if (index == -256){
-  index <- strtoi(Sys.getenv("AWS_BATCH_JOB_ARRAY_INDEX")) + 1
-}
+# # Set index, use aws array if index is -256 (ascii code for AWS) DEPRICATED
+# index <- opts$index + 1
+# if (index == -256){
+#   index <- strtoi(Sys.getenv("AWS_BATCH_JOB_ARRAY_INDEX")) + 1
+# }
 
 # Load csv of lake ids as a data.table
 
@@ -445,8 +446,8 @@ for(i in 1:nrow(viable_locations)){
 dir.create(file.path(indir, "viable"), showWarnings = FALSE)
 numbers <- gregexpr("[0-9]+", basename(opts$input_file))
 result <- unlist(regmatches(basename(opts$input_file), numbers))
-fwrite(viable_locations[,"lake"], file.path(indir, paste0("viable/viable_locations", index, ".csv")))
-print('Found viable lake...')
+fwrite(viable_locations[,"lake"], file.path(indir, paste0("viable/viable_locations.csv")))
+print('Found viable lakes...')
 
 
 
