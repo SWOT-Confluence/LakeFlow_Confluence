@@ -21,6 +21,8 @@ library(geoBAMr)
 library(future)
 library(future.apply)
 library(optparse)
+library(paws)
+library(logger)
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
 # Add in which python version to use with reticulate
@@ -37,7 +39,8 @@ use_python("/usr/local/bin/python3.9")
 option_list <- list(
     make_option(c("-c", "--input_file"), type = "character", default = NULL, help = "filepath to csv with lake ids to download data"),
     make_option(c("-w", "--workers"), type = "integer", default = NULL, help = "number of workers to use to download swot data"),
-    make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files")
+    make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files"),
+    make_option(c("-p", "--prefix"), type = "character", default = "", help = "prefix for hydrocron api-key storage")
     ## I had an index argument, but the script is actually faster in seriel instead of calling hydrocron in parallel
     # make_option(c("--index"), type = "integer", default = NULL , help = "Chooses what lake to process from input file, if -256 it usese AWS array number")
   )
@@ -64,6 +67,9 @@ workers_ <- opts$workers
 
 # Path that holds input data, was previously 'in'
 indir <- opts$indir
+
+# Prefix for hydrocron API in the parameter store
+prefix <- opts$prefix
 
 ################################################################################
 # Load datasets
@@ -94,10 +100,36 @@ dir.create(file.path(indir, "/clean"), showWarnings = FALSE)
 # Define functions
 ################################################################################
 
-pull_lake_data <- function(feature_id){
+
+get_api_key <- function(prefix) {
+    ssm <- paws::ssm()
+    
+    tryCatch({
+      param_name <- paste0(prefix, "-hydrocron-key")
+      response <- ssm$get_parameter(
+        Name = param_name,
+        WithDecryption = TRUE
+      )
+      api_key <- response$Parameter$Value
+      log_info("Querying with Hydrocron API key.")
+      return(api_key)
+    }, error = function(e) {
+      log_error(e$message)
+      log_info("Not querying with Hydrocron API key.")
+      return("")
+    })
+  }
+
+pull_lake_data <- function(feature_id, api_key){
   print("pulling lake data")
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=PriorLake&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=lake_id,time_str,wse,area_total,xovr_cal_q,partial_f,dark_frac,ice_clim_f')
-  response = GET(website)
+  if (nzchar(api_key)) {
+    # do something
+    response = GET(website, add_headers("x-hydrocon-key" = api_key))
+  } else {
+    # do something else
+    response = GET(website)
+  } 
   print(content(response))
   pull = content(response, as='parsed')$results
   data = try(read.csv(textConnection(pull$csv), sep=','))
@@ -106,20 +138,26 @@ pull_lake_data <- function(feature_id){
   return(data)
 }
 
-batch_download_SWOT_lakes <- function(obs_ids){
+batch_download_SWOT_lakes <- function(obs_ids, api_key){
   print("batch downloading swot lakes")
   plan(multisession, workers = workers_)
-  SWOT_data = future_lapply(unique(obs_ids),pull_lake_data)
+  SWOT_data = future_lapply(unique(obs_ids),pull_lake_data, api_key = api_key)
   plan(sequential)
   print("finished batch downloading swot lakes")
   return(SWOT_data)
 } 
 
-pull_data <- function(feature_id){
+pull_data <- function(feature_id, api_key){
   print("pulling data")
   # Function to pull swot reach data using hydrocron
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=Reach&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=reach_id,time_str,wse,width,slope,slope2,d_x_area,area_total,reach_q,p_width,xovr_cal_q,partial_f,dark_frac,ice_clim_f,wse_r_u,slope_r_u,reach_q_b')
-  response = GET(website)
+  if (nzchar(api_key)) {
+    # do something
+    response = GET(website, add_headers("x-hydrocon-key" = api_key))
+  } else {
+    # do something else
+    response = GET(website)
+  } 
   pull = content(response, as='parsed')$results
   data = try(read.csv(textConnection(pull$csv), sep=','))
   if(is.error(data)){return(NA)}
@@ -127,11 +165,11 @@ pull_data <- function(feature_id){
   return(data)
 }
 
-batch_download_SWOT <- function(obs_ids){
+batch_download_SWOT <- function(obs_ids, api_key){
   print("batch downloading swot")
   # Batch download swot river reaches 
   plan(multisession, workers = workers_)
-  SWOT_data = future_lapply(unique(obs_ids),pull_data)
+  SWOT_data = future_lapply(unique(obs_ids),pull_data, api_key = api_key)
   plan(sequential)
   return(SWOT_data)
 }
@@ -378,11 +416,12 @@ extract_data_by_lake <- function(lake, indir){
 
 
 
+api_key <- get_api_key(prefix)
 ################################################################################
 # Read in lake data via hydrocron
 ################################################################################
 #files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')][5:20])
-files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$lake_id%in%lakes_input$lake])
+files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$lake_id%in%lakes_input$lake], api_key)
 combined = rbindlist(files_filt[!is.na(files_filt)])
 
 ################################################################################
@@ -415,7 +454,7 @@ if (is.null(reaches) || length(reaches) == 0){
   message("No reaches found, exiting....")
   quit(save = "no", status = 0)
 }
-swot_river_pull = batch_download_SWOT(reaches)
+swot_river_pull = batch_download_SWOT(reaches, api_key)
 swot_river_filt = lapply(swot_river_pull[!is.na(swot_river_pull)], filter_function)
 swot_river = rbindlist(swot_river_filt)
 swot_river$time=as_datetime(swot_river$time_str)

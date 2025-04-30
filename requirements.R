@@ -36,6 +36,11 @@ install.packages('bit64')
 library(bit64)
 install.packages("optparse")
 library(optparse)
+install.packages("paws")
+library(paws)
+install.packages("logger")
+library(logger)
+
 
 #version <- "3.9.13"
 #install_python(version)
