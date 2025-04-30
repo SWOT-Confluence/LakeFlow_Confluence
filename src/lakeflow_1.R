@@ -37,7 +37,7 @@ use_python("/usr/local/bin/python3.9")
 ################################################################################
 # Set args
 option_list <- list(
-    make_option(c("-c", "--input_file"), type = "character", default = NULL, help = "filepath to csv with lake ids to download data"),
+    make_option(c("-c", "--input_file"), type = "character", default = NULL, help = "filepath to csv with lake ids to download data, point it to reaches_of_interest.json to process lakes associated with those reaches"),
     make_option(c("-w", "--workers"), type = "integer", default = NULL, help = "number of workers to use to download swot data"),
     make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files"),
     make_option(c("-p", "--prefix"), type = "character", default = "", help = "prefix for hydrocron api-key storage")
@@ -50,17 +50,6 @@ option_list <- list(
 opt_parser <- OptionParser(option_list = option_list)
 opts <- parse_args(opt_parser)
 
-# # Set index, use aws array if index is -256 (ascii code for AWS) DEPRICATED
-# index <- opts$index + 1
-# if (index == -256){
-#   index <- strtoi(Sys.getenv("AWS_BATCH_JOB_ARRAY_INDEX")) + 1
-# }
-
-# Load csv of lake ids as a data.table
-
-lakes_input <- fread(opts$input_file)
-# lakes_input <- lakes_input[index]
-lakes_input$lake <- as.character(lakes_input$lake_id)
 
 # Number of workers used to download SWOT data
 workers_ <- opts$workers
@@ -100,6 +89,27 @@ dir.create(file.path(indir, "/clean"), showWarnings = FALSE)
 # Define functions
 ################################################################################
 
+get_connected_lake_ids <- function(reach_ids, pld) {
+  # Ensure reach_ids are character (to match string fields)
+  reach_ids <- as.character(reach_ids)
+  
+  # Function to check if any of the reach_ids are in a comma-separated field
+  has_overlap <- function(field, reach_ids) {
+    sapply(field, function(x) {
+      ids <- unlist(strsplit(x, ","))
+      any(ids %in% reach_ids)
+    })
+  }
+
+  # Find rows where either upstream or downstream reach_id lists contain any of the reach_ids
+  is_connected_up <- has_overlap(pld$U_reach_id, reach_ids)
+  is_connected_dn <- has_overlap(pld$D_reach_id, reach_ids)
+
+  # Combine the logical vectors and get lake_ids
+  connected_lakes <- unique(pld$lake_id[is_connected_up | is_connected_dn])
+
+  return(connected_lakes)
+}
 
 get_api_key <- function(prefix) {
     ssm <- paws::ssm()
@@ -416,11 +426,25 @@ extract_data_by_lake <- function(lake, indir){
 
 
 
+
 api_key <- get_api_key(prefix)
 ################################################################################
 # Read in lake data via hydrocron
 ################################################################################
-#files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$continent%in%c('7', '8')][5:20])
+
+# Load csv of lake ids as a data.table
+if (basename(opts$input_file) != "reaches_of_interest.json") {
+  
+  lakes_input <- fread(opts$input_file)
+  lakes_input$lake <- as.character(lakes_input$lake_id)
+  
+}else{
+  reaches_of_interest <- fromJSON(opts$input_file)
+  # lake_ids_subset <- lake_ids[grepl("3$", lake_ids)]
+  connected_lake_ids <- get_connected_lake_ids(reach_ids = reaches_of_interest, pld = updated_pld)
+  lakes_input <- data.table(lake = connected_lake_ids)
+}
+
 files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$lake_id%in%lakes_input$lake], api_key)
 combined = rbindlist(files_filt[!is.na(files_filt)])
 
