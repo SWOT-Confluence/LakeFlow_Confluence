@@ -58,3 +58,6 @@
 - setup EFS for Lakeflow
 - Setup bath compute environment for lakeflow
 
+
+- added untested hydrocron API key pull (works locally, untested on ssm)
+
