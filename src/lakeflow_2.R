@@ -137,6 +137,11 @@ lakeFlow = function(lake){
     }
     area_param = c(NA, unlist(area_val))
     lakeObs$storage_dt = (ht_change*area_param)/3
+    
+    # Use NASA's storage change if available and convert to m3.  
+    if(all(lakeObs$ds2_q!=-999999999999)){
+      lakeObs$storage_dt = lakeObs$ds2_q*1e9 
+    }
   
     # Put data into table matching LakeFlow code (synthetic dataset): 
     lakeObsOut = lakeObs
@@ -169,11 +174,17 @@ lakeFlow = function(lake){
     # Create seperate matrices for each type of swot obs. Time across, reach down
     up_df_stan = lapply(names(upObsOut)[-1], function(f) as.matrix(up_df_out[grep(f,rownames(up_df_out)),]))
     names(up_df_stan) = names(upObsOut)[-1]
+    up_df_stan = up_df_stan[-c(2,3)] #Take out the columns that are not necessary for stan
     up_df_stan = lapply(up_df_stan, apply, 2, as.numeric)
   
     dn_df_stan = lapply(names(dnObsOut)[-1], function(f) as.matrix(dn_df_out[grep(f,rownames(dn_df_out)),]))
     names(dn_df_stan) = names(dnObsOut)[-1]
+    dn_df_stan = dn_df_stan[-c(2,3)] #Take out the columns that are not necessary for stan
     dn_df_stan = lapply(dn_df_stan, apply, 2, as.numeric)
+    
+    # Aggregate information on shifted reaches for output file (this is necessary where we have multiple in/outflows)
+    upObsOutput = data.table(upObsOut)[, .SD[1], by = reach_id_u, .SDcols = c("shifted_u", "reach_id_original_u")]
+    dnObsOutput = data.table(dnObsOut)[, .SD[1], by = reach_id_d, .SDcols = c("shifted_d", "reach_id_original_d")]
   
     transposer <- function(df) {
         z<-t(df)
@@ -543,7 +554,7 @@ lakeFlow = function(lake){
         inflow_outputs[[j]] = data.table(q_lakeflow = q_estimate, reach_id=upID[j], n_lakeflow=exp(roughness_inflow$`mean-all chains`[j]),a0_lakeflow=bath_inflow$`mean-all chains`[j],date=lakeObsOut$date_l,lake_id=lake,q_model=up_sos_stan$qHat_u[j,],
                                      width = stan_data$w[j,], slope2 = stan_data$s[j,], da = d_x_area_scaled_u[j,], wse = up_df_stan$wse_u[j,],
                                      storage=lakeObsOut$storage_l,dv=stan_data$dv_per, tributary=stan_data$lateral, et=stan_data$et,type='inflow',n_lakeflow_sd = roughness_inflow_sd$sd[j],a0_lakeflow_sd =bath_inflow_sd$sd[j],
-                                     q_upper = stan_data$qInupper[j],q_lower = stan_data$qInlower[j])
+                                     q_upper = stan_data$qInupper[j],q_lower = stan_data$qInlower[j], shifted = upObsOutput$shifted_u[j], reach_id_original = upObsOutput$reach_id_original_u[j])
     }
     inflow_outputs = rbindlist(inflow_outputs)
     inflow_outputs$bayes_q = bayes_inflow$`mean-all chains`
@@ -556,7 +567,7 @@ lakeFlow = function(lake){
         outflow_outputs[[j]] = data.table(q_lakeflow = q_estimate, reach_id=dnID[j], n_lakeflow=exp(roughness_outflow$`mean-all chains`[j]),a0_lakeflow=bath_outflow$`mean-all chains`[j],date=lakeObsOut$date_l,lake_id=lake,q_model=dn_sos_stan$qHat_d[j,],
                                       width = stan_data$w2[j,], slope2 = stan_data$s2[j,], da = d_x_area_scaled_d[j,], wse = dn_df_stan$wse_d[j,],
                                       storage=lakeObsOut$storage_l,dv=stan_data$dv_per, tributary=stan_data$lateral, et=stan_data$et,type='outflow',n_lakeflow_sd = roughness_outflow_sd$sd[j],a0_lakeflow_sd =bath_outflow_sd$sd[j],
-                                      q_upper = stan_data$qOutupper[j],q_lower = stan_data$qOutlower[j])
+                                      q_upper = stan_data$qOutupper[j],q_lower = stan_data$qOutlower[j], shifted = dnObsOutput$shifted_d[j], reach_id_original = dnObsOutput$reach_id_original_d[j])
     }
     outflow_outputs = rbindlist(outflow_outputs)
     outflow_outputs$bayes_q = bayes_outflow$`mean-all chains`

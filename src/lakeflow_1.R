@@ -132,7 +132,7 @@ get_api_key <- function(prefix) {
 
 pull_lake_data <- function(feature_id, api_key){
   print("pulling lake data")
-  website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=PriorLake&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=lake_id,time_str,wse,area_total,xovr_cal_q,partial_f,dark_frac,ice_clim_f')
+  website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=PriorLake&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=lake_id,time_str,wse,area_total,xovr_cal_q,partial_f,dark_frac,ice_clim_f,ds2_q')
   if (nzchar(api_key)) {
     # do something
     response = GET(website, add_headers("x-hydrocon-key" = api_key))
@@ -248,7 +248,7 @@ combining_lk_rv_obs = function(lake){
       dnObs_alt$time=as_datetime(dnObs_alt$time_str)
       dnObs_alt$reach_id_original = dnObs_alt$reach_id
       dnObs_alt$reach_id = f
-      dnObs_alt$shifted = 'yes'
+      dnObs_alt$shifted = '1'
       if(nrow(dnObs_alt)>0){
         return(dnObs_alt)
       }
@@ -257,7 +257,15 @@ combining_lk_rv_obs = function(lake){
   
   additional_ds_obs = rbindlist(lapply(missing_dn, shift_a_reach_away))
   dnObs_all = bind_rows(dnObs_all, additional_ds_obs)
-  dn_shifted = any(dnObs_all$shifted=='yes')
+  
+  # Collect information on shifted reaches for output files
+  if ("shifted" %in% colnames(dnObs_all) == FALSE) {
+    dnObs_all$shifted = '0'
+    dnObs_all$reach_id_original = 'NA'
+  } else {
+    dnObs_all$shifted[is.na(dnObs_all$shifted)] = '0'
+    dnObs_all$reach_id_original[is.na(dnObs_all$reach_id_original)] = 'NA'
+  }
   
   #Allow upstream reaches to shift one reach upstream.
   n_us_reaches = updated_pld$D_reach_n[updated_pld$lake_id==lake]
@@ -273,7 +281,7 @@ combining_lk_rv_obs = function(lake){
       upObs_alt$time=as_datetime(upObs_alt$time_str)
       upObs_alt$reach_id_original = upObs_alt$reach_id
       upObs_alt$reach_id = f
-      upObs_alt$shifted = 'yes'
+      upObs_alt$shifted = '1'
       if(nrow(upObs_alt)>0){
         return(upObs_alt)
       }
@@ -282,7 +290,15 @@ combining_lk_rv_obs = function(lake){
   
   additional_us_obs = rbindlist(lapply(missing_up, shift_a_reach_up))
   upObs_all = bind_rows(upObs_all, additional_us_obs)
-  up_shifted = any(upObs_all$shifted=='yes')
+  
+  # Collect information on shifted reaches for output files
+  if ("shifted" %in% colnames(upObs_all) == FALSE) {
+    upObs_all$shifted = '0'
+    upObs_all$reach_id_original = 'NA'
+  } else {
+    upObs_all$shifted[is.na(upObs_all$shifted)] = '0'
+    upObs_all$reach_id_original[is.na(upObs_all$reach_id_original)] = 'NA'
+  }
   
   
   lakeObs_all = lakeFilt[lakeFilt$lake_id==lake,]
@@ -302,9 +318,9 @@ combining_lk_rv_obs = function(lake){
   dnObs_all$date = as.Date(dnObs_all$time)
   
   # FIXME: Aggregating lakes to mean values for multiple observations in one day. 
-  lakeObs = data.table(lakeObs_all)[,c('wse', 'area_total', 'date')][,lapply(.SD, mean), by=date]
-  upObs = data.table(upObs_all)[,c('wse', 'width', 'slope', 'slope2','reach_id', 'date')][,lapply(.SD, mean), by=list(date, reach_id)]
-  dnObs = data.table(dnObs_all)[,c('wse', 'width', 'slope', 'slope2','reach_id', 'date')][,lapply(.SD, mean), by=list(date, reach_id)]
+  lakeObs = data.table(lakeObs_all)[,c('wse', 'area_total', 'ds2_q', 'date')][,lapply(.SD, mean), by=date]
+  upObs = data.table(upObs_all)[,c('wse', 'width', 'slope', 'slope2','reach_id', 'date', 'shifted', 'reach_id_original')][,lapply(.SD, mean), by=list(date, reach_id, shifted, reach_id_original)]
+  dnObs = data.table(dnObs_all)[,c('wse', 'width', 'slope', 'slope2','reach_id', 'date', 'shifted', 'reach_id_original')][,lapply(.SD, mean), by=list(date, reach_id, shifted, reach_id_original)]
   
   lkDates = unique(lakeObs$date)
   upDts = upObs[,.N,by=date][N>=length(upID)] # limit to dates with obs for each upstream reach.
@@ -323,9 +339,6 @@ combining_lk_rv_obs = function(lake){
   
   upObs = upObs[order(upObs$reach_id),]
   dnObs = dnObs[order(dnObs$reach_id),]
-  
-  upObs$shifted = up_shifted
-  dnObs$shifted = dn_shifted
   
   if(nrow(lakeObs)<4){return(NA)}
   output = list(lakeObs, upObs, dnObs)
