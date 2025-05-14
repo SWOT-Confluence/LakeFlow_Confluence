@@ -143,7 +143,7 @@ pull_lake_data <- function(feature_id, api_key){
     # do something else
     response = GET(website)
   } 
-  print(content(response))
+  # print(content(response))
   pull = content(response, as='parsed')$results
   if (!is.null(pull)) {
     data = try(read.csv(textConnection(pull$csv), sep=','))
@@ -167,7 +167,7 @@ batch_download_SWOT_lakes <- function(obs_ids, api_key){
 } 
 
 pull_data <- function(feature_id, api_key){
-  print("pulling data")
+  # print("pulling data")
   # Function to pull swot reach data using hydrocron
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=Reach&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=reach_id,time_str,wse,width,slope,slope2,d_x_area,area_total,reach_q,p_width,xovr_cal_q,partial_f,dark_frac,ice_clim_f,wse_r_u,slope_r_u,reach_q_b')
   if (nzchar(api_key)) {
@@ -200,7 +200,7 @@ batch_download_SWOT <- function(obs_ids, api_key){
 }
 
 tukey_test = function(ts){
-  print("running tukey")
+  # print("running tukey")
   # Turkey test for removing outliers
   wseIQR = quantile(ts$wse, c(.25, .75))
   wseT_l = wseIQR[1] - (diff(wseIQR)*1.5)
@@ -219,7 +219,7 @@ tukey_test = function(ts){
 }
 
 tukey_test_lake = function(ts){
-  print("running tukey lake")
+  # print("running tukey lake")
   # Turkey test for removing outliers 
   wseIQR = quantile(ts$wse, c(.25, .75))
   wseT_l = wseIQR[1] - (diff(wseIQR)*1.5)
@@ -230,7 +230,7 @@ tukey_test_lake = function(ts){
 }
 
 filter_function = function(swot_ts){
-  print("filtering")
+  # print("filtering")
   # Function to filter swot reach data
   # Allowing partial obs to see if it degrades performances. 
   #dawg_filter = tukey_test(swot_ts[swot_ts$time_str!='no_data'&swot_ts$ice_clim_f<2&swot_ts$dark_frac<=0.5&swot_ts$xovr_cal_q<2&!is.na(swot_ts$slope2)&!is.infinite(swot_ts$slope2)&swot_ts$slope2>0&swot_ts$width>0,])
@@ -242,13 +242,14 @@ filter_function = function(swot_ts){
 
 # Ryan's updated code to get data from farther up/downstream reaches
 combining_lk_rv_obs = function(lake, api_key){
-  print("combining lake and river obs")
+  # print("combining lake and river obs")
 
   #Pull in SWOT river data and subset predownloaded SWOT lake data. 
   upID = unlist(strsplit(updated_pld$U_reach_id[updated_pld$lake_id==lake], ','))
   dnID = unlist(strsplit(updated_pld$D_reach_id[updated_pld$lake_id==lake], ','))
   upObs_all = swot_river[swot_river$reach_id%in%upID,]
   dnObs_all = swot_river[swot_river$reach_id%in%dnID,]
+  dnObs_all$reach_id <- as.character(dnObs_all$reach_id)
 
   sword_continents = list("af", "eu", "as", "as", "oc", "sa", "na", "na", "na")
 
@@ -271,6 +272,7 @@ combining_lk_rv_obs = function(lake, api_key){
     nc_close(sword_nc)
 
     n_alt_ds_reaches = sword$n_rch_dn[sword$reach_id==f]
+
     if(n_alt_ds_reaches==1){
       alt_ds_reach = sword$rch_id_dn[sword$reach_id==f]
       dn_river_pull = try(lapply(alt_ds_reach, pull_data, api_key = api_key))
@@ -287,9 +289,12 @@ combining_lk_rv_obs = function(lake, api_key){
   }
 
   additional_ds_obs = rbindlist(lapply(missing_dn, shift_a_reach_away, api_key = api_key))
+
   if (nrow(dnObs_all)==0) {
     dnObs_all= additional_ds_obs
   } else {
+    additional_ds_obs$reach_id <- as.character(additional_ds_obs$reach_id)
+    dnObs_all$reach_id <- as.character(dnObs_all$reach_id)
     dnObs_all = bind_rows(dnObs_all, additional_ds_obs)
   }
   dn_shifted = any(dnObs_all$shifted=='yes')
@@ -329,6 +334,10 @@ combining_lk_rv_obs = function(lake, api_key){
   }
 
   additional_us_obs = rbindlist(lapply(missing_up, shift_a_reach_up, api_key = api_key))
+  additional_us_obs$reach_id <- as.character(additional_us_obs$reach_id)
+  upObs_all$reach_id <- as.character(upObs_all$reach_id)
+
+  
   if (nrow(upObs_all)==0) {
     upObs_all= additional_us_obs
   } else {
@@ -343,8 +352,17 @@ combining_lk_rv_obs = function(lake, api_key){
   # FIXME: changing lake areas to pld mean lake areas due to SWOT errors. 
   prior_area = updated_pld$Lake_area[updated_pld$lake_id==lake]
   lakeObs_all$area_total = prior_area
+  
+  if(nrow(lakeObs_all)<3){
+    print('noo lake obs... exiting')
+    return(NA)}
+  if(nrow(upObs_all)<1){
+    print('nooo up obs... exiting')
+    return(NA)}
+  if(nrow(dnObs_all)<1){
+    print('nooo down obs... exiting')
+    return(NA)}
 
-  if(nrow(lakeObs_all)<3){return(NA)}
 
   ################################################################################
   # Get dates in proper format and subset to matching dates. 
@@ -385,7 +403,7 @@ combining_lk_rv_obs = function(lake, api_key){
 }
 
 download_tributary = function(reaches, start_date='01-01-2023'){
-  print("downloading tribs")
+  # print("downloading tribs")
   # Function to pull tributary inflow Q estimates from Geoglows. 
   source_python('src/geoglows_aws_pull.py')
   tributary_flow = pull_tributary(reach_id = reaches, start_date=start_date)
@@ -397,7 +415,7 @@ download_tributary = function(reaches, start_date='01-01-2023'){
 
 
 pull_geoglows = function(reaches, start_date='01-01-2023'){
-  print("pulling geoglows")
+  # print("pulling geoglows")
   # Function to pull geoglows data for prior purposes
   source_python('src/geoglows_aws_pull.py')
   model_flow = pull_tributary(reach_id = reaches, start_date=start_date)
@@ -407,8 +425,7 @@ pull_geoglows = function(reaches, start_date='01-01-2023'){
 
 
 extract_data_by_lake <- function(lake, indir){
-  print("extracting data by lake"
-  )
+  # print("extracting data by lake")
     
     # Use dynamic prior Q. False = SOS prior estimate from GRADES / MAF geoglows
     use_ts_prior=TRUE
@@ -493,8 +510,11 @@ if (basename(opts$input_file) != "reaches_of_interest.json") {
 }else{
   reaches_of_interest <- fromJSON(opts$input_file)
   # lake_ids_subset <- lake_ids[grepl("3$", lake_ids)]
+  print("reaches of interest")
+  print(reaches_of_interest)
   connected_lake_ids <- get_connected_lake_ids(reach_ids = reaches_of_interest, pld = updated_pld)
   lakes_input <- data.table(lake = connected_lake_ids)
+  print(lakes_input)
 }
 
 files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$lake_id%in%lakes_input$lake], api_key)
@@ -550,7 +570,7 @@ if (nrow(viable_locations) == 0){
 }
 
 for(i in 1:nrow(viable_locations)){
-  print(viable_locations)
+  # print(viable_locations)
     extract_data_by_lake(viable_locations$lake[i], indir)
 }
 
