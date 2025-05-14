@@ -1,7 +1,6 @@
 # Install packages
-# install.packages("RNetCDF")
 install.packages("ncdf4")
-library(ncdf4)
+install.packages("RNetCDF")
 install.packages("remotes")
 library(remotes)
 remotes:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE) 
