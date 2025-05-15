@@ -52,17 +52,17 @@ jobs:
           flavor: |
             latest=true
 
-      - name: Build and push Docker image FLPE
+      - name: Build and push Docker image INPUT
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile-flpe
+          file: Dockerfile_input
           push: true
           pull: true
           tags: ${{ steps.meta-lf-input.outputs.tags }}
           labels: ${{ steps.meta-lf-input.outputs.labels }}
 
-      - name: Extract metadata (tags, labels) for Docker MOI
+      - name: Extract metadata (tags, labels) for Docker DEPLOY
         id: meta-lf-deploy
         uses: docker/metadata-action@v5
         with:
@@ -72,11 +72,11 @@ jobs:
           flavor: |
             latest=true
 
-      - name: Build and push Docker image MOI
+      - name: Build and push Docker image DEPLOY
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile-moi
+          file: Dockerfile_deploy
           push: true
           pull: true
           tags: ${{ steps.meta-lf-deploy.outputs.tags }}
