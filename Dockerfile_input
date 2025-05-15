@@ -1,4 +1,5 @@
-FROM python:3.12 AS stage_0
+# Start from python image
+FROM python:3.12 AS stage0
 
 # Set working directory
 WORKDIR /app
@@ -58,9 +59,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.R .
 RUN Rscript requirements.R
 
-# Stage 1: Copy application code
-FROM stage_0 AS stage_1
-
+FROM stage0 AS stage1
+#move all the scripts needed
 COPY /src/lakeflow_1.R .
 RUN mkdir ./src
 COPY /src/geoglows_aws_pull.py ./src
