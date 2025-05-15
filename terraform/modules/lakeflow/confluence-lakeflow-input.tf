@@ -13,7 +13,7 @@ resource "aws_batch_job_definition" "generate_batch_jd_lakeflow_input" {
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        awslogs-group = aws_cloudwatch_log_group.cw_log_group.name
+        awslogs-group = aws_cloudwatch_log_group.cw_log_group_input.name
       }
     }
     resourceRequirements = [{
@@ -43,6 +43,6 @@ resource "aws_batch_job_definition" "generate_batch_jd_lakeflow_input" {
 }
 
 # Log group
-resource "aws_cloudwatch_log_group" "cw_log_group" {
+resource "aws_cloudwatch_log_group" "cw_log_group_input" {
   name = "/aws/batch/job/${var.prefix}-lakeflow-input/"
 }
