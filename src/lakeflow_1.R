@@ -5,7 +5,7 @@
 ################################################################################
 # Load libraries
 ################################################################################
-library(RNetCDF)
+library(ncdf4)
 library(foreign)
 library(lubridate)
 library(data.table)
@@ -26,13 +26,18 @@ library(logger)
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
 # Add in which python version to use with reticulate
-use_python("/usr/local/bin/python3.9")
+use_python("/usr/local/bin/python3.12")
 
 # Example Deployment using docker
 # docker run --mount type=bind,source=C:/Users/kmcquil/Documents/LakeFlow_Confluence_Dev,target=/app lakeflow Rscript src/lakeflow_1.R "in/lakeids/lakeid1.csv" 1
 # docker run -v /mnt/lakeflow:/data/input lakeflow_input -c /data/input/test/lakeid1.csv -w 1 -i /data/input
 
 #use_virtualenv("r-reticulate")
+
+################################################################################
+# Constants
+
+SWORD_VERSION = "16"
 
 ################################################################################
 # Set args
@@ -76,7 +81,6 @@ et$lake_id <- as.character(et$lake_id)
 # Load tributary dataset
 tributary = fread(file.path(indir,'/ancillary/tributaries.csv'))
 tributary$lake_id <- as.character(tributary$lake_id)
-
 
 # Load geoglows dataset
 sword_geoglows = fread(file.path(indir,'/ancillary/sword_geoglows.csv'))
@@ -131,7 +135,6 @@ get_api_key <- function(prefix) {
   }
 
 pull_lake_data <- function(feature_id, api_key){
-  print("pulling lake data")
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=PriorLake&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=lake_id,time_str,wse,area_total,xovr_cal_q,partial_f,dark_frac,ice_clim_f')
   if (nzchar(api_key)) {
     # do something
@@ -140,10 +143,16 @@ pull_lake_data <- function(feature_id, api_key){
     # do something else
     response = GET(website)
   } 
-  print(content(response))
+  # print(content(response))
   pull = content(response, as='parsed')$results
-  data = try(read.csv(textConnection(pull$csv), sep=','))
+  if (!is.null(pull)) {
+    data = try(read.csv(textConnection(pull$csv), sep=','))
+  } else {
+    return(NA)
+  }
+
   if(is.error(data)){return(NA)}
+
   data$reach_id = feature_id
   return(data)
 }
@@ -158,7 +167,7 @@ batch_download_SWOT_lakes <- function(obs_ids, api_key){
 } 
 
 pull_data <- function(feature_id, api_key){
-  print("pulling data")
+  # print("pulling data")
   # Function to pull swot reach data using hydrocron
   website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?feature=Reach&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2025-12-31T00:00:00Z&output=csv&fields=reach_id,time_str,wse,width,slope,slope2,d_x_area,area_total,reach_q,p_width,xovr_cal_q,partial_f,dark_frac,ice_clim_f,wse_r_u,slope_r_u,reach_q_b')
   if (nzchar(api_key)) {
@@ -169,8 +178,14 @@ pull_data <- function(feature_id, api_key){
     response = GET(website)
   } 
   pull = content(response, as='parsed')$results
-  data = try(read.csv(textConnection(pull$csv), sep=','))
+  if (!is.null(pull)) {
+    data = try(read.csv(textConnection(pull$csv), sep=','))
+  } else {
+    return(NA)
+  }
+  
   if(is.error(data)){return(NA)}
+
   data$reach_id = feature_id
   return(data)
 }
@@ -179,13 +194,13 @@ batch_download_SWOT <- function(obs_ids, api_key){
   print("batch downloading swot")
   # Batch download swot river reaches 
   plan(multisession, workers = workers_)
-  SWOT_data = future_lapply(unique(obs_ids),pull_data, api_key = api_key)
+  SWOT_data = future_lapply(unique(obs_ids), pull_data, api_key = api_key)
   plan(sequential)
   return(SWOT_data)
 }
 
 tukey_test = function(ts){
-  print("running tukey")
+  # print("running tukey")
   # Turkey test for removing outliers
   wseIQR = quantile(ts$wse, c(.25, .75))
   wseT_l = wseIQR[1] - (diff(wseIQR)*1.5)
@@ -204,7 +219,7 @@ tukey_test = function(ts){
 }
 
 tukey_test_lake = function(ts){
-  print("running tukey lake")
+  # print("running tukey lake")
   # Turkey test for removing outliers 
   wseIQR = quantile(ts$wse, c(.25, .75))
   wseT_l = wseIQR[1] - (diff(wseIQR)*1.5)
@@ -215,7 +230,7 @@ tukey_test_lake = function(ts){
 }
 
 filter_function = function(swot_ts){
-  print("filtering")
+  # print("filtering")
   # Function to filter swot reach data
   # Allowing partial obs to see if it degrades performances. 
   #dawg_filter = tukey_test(swot_ts[swot_ts$time_str!='no_data'&swot_ts$ice_clim_f<2&swot_ts$dark_frac<=0.5&swot_ts$xovr_cal_q<2&!is.na(swot_ts$slope2)&!is.infinite(swot_ts$slope2)&swot_ts$slope2>0&swot_ts$width>0,])
@@ -226,23 +241,41 @@ filter_function = function(swot_ts){
 }
 
 # Ryan's updated code to get data from farther up/downstream reaches
-combining_lk_rv_obs = function(lake){
-  print("combining lake and river obs")
+combining_lk_rv_obs = function(lake, api_key){
+  # print("combining lake and river obs")
+
   #Pull in SWOT river data and subset predownloaded SWOT lake data. 
   upID = unlist(strsplit(updated_pld$U_reach_id[updated_pld$lake_id==lake], ','))
   dnID = unlist(strsplit(updated_pld$D_reach_id[updated_pld$lake_id==lake], ','))
   upObs_all = swot_river[swot_river$reach_id%in%upID,]
   dnObs_all = swot_river[swot_river$reach_id%in%dnID,]
-  
+  dnObs_all$reach_id <- as.character(dnObs_all$reach_id)
+
+  sword_continents = list("af", "eu", "as", "as", "oc", "sa", "na", "na", "na")
+
   #Allow downstream reaches to shift one reach downstream.
   n_ds_reaches = updated_pld$D_reach_n[updated_pld$lake_id==lake]
   n_ds_reaches_obs = dnObs_all[,.N,by=reach_id]
   missing_dn = dnID[dnID%!in%n_ds_reaches_obs$reach_id]
-  shift_a_reach_away = function(f){
+  shift_a_reach_away = function(f, api_key){
+    print("Shift a reach away...")
+
+    reach_id = as.character(f)
+    reach_continent = strtoi(substring(reach_id, 1, 1))
+    continent = paste0(sword_continents[reach_continent], "_sword_v", SWORD_VERSION, ".nc")
+    
+    sword_nc = nc_open(file.path(dirname(indir), "sword", continent))
+    sword = list(reach_id=ncvar_get(sword_nc, "reaches/reach_id"),
+                 rch_id_dn=ncvar_get(sword_nc, "reaches/rch_id_dn"),
+                 n_rch_dn=ncvar_get(sword_nc, "reaches/n_rch_down")
+    )
+    nc_close(sword_nc)
+
     n_alt_ds_reaches = sword$n_rch_dn[sword$reach_id==f]
+
     if(n_alt_ds_reaches==1){
       alt_ds_reach = sword$rch_id_dn[sword$reach_id==f]
-      dn_river_pull = try(lapply(alt_ds_reach,pull_data))
+      dn_river_pull = try(lapply(alt_ds_reach, pull_data, api_key = api_key))
       dn_river_filt = lapply(dn_river_pull[!is.na(dn_river_pull)], filter_function)
       dnObs_alt = rbindlist(dn_river_filt)
       dnObs_alt$time=as_datetime(dnObs_alt$time_str)
@@ -254,20 +287,40 @@ combining_lk_rv_obs = function(lake){
       }
     }
   }
-  
-  additional_ds_obs = rbindlist(lapply(missing_dn, shift_a_reach_away))
-  dnObs_all = bind_rows(dnObs_all, additional_ds_obs)
+
+  additional_ds_obs = rbindlist(lapply(missing_dn, shift_a_reach_away, api_key = api_key))
+
+  if (nrow(dnObs_all)==0) {
+    dnObs_all= additional_ds_obs
+  } else {
+    additional_ds_obs$reach_id <- as.character(additional_ds_obs$reach_id)
+    dnObs_all$reach_id <- as.character(dnObs_all$reach_id)
+    dnObs_all = bind_rows(dnObs_all, additional_ds_obs)
+  }
   dn_shifted = any(dnObs_all$shifted=='yes')
-  
+
   #Allow upstream reaches to shift one reach upstream.
   n_us_reaches = updated_pld$D_reach_n[updated_pld$lake_id==lake]
   n_us_reaches_obs = upObs_all[,.N,by=reach_id]
   missing_up = upID[upID%!in%n_us_reaches_obs$reach_id]
-  shift_a_reach_up = function(f){
+  shift_a_reach_up = function(f, api_key){
+    print("Shift a reach up")
+
+    reach_id = as.character(f)
+    reach_continent = strtoi(substring(reach_id, 1, 1))
+    continent = paste0(sword_continents[reach_continent], "_sword_v", SWORD_VERSION, ".nc")
+
+    sword_nc = nc_open(file.path(dirname(indir), "sword", continent))
+    sword = list(reach_id=ncvar_get(sword_nc, "reaches/reach_id"),
+                 rch_id_up=ncvar_get(sword_nc, "reaches/rch_id_up"),
+                 n_rch_up=ncvar_get(sword_nc, "reaches/n_rch_up")
+                 )
+    nc_close(sword_nc)
+
     n_alt_us_reaches = sword$n_rch_up[sword$reach_id==f]
     if(n_alt_us_reaches==1){
       alt_us_reach = sword$rch_id_up[sword$reach_id==f]
-      up_river_pull = try(lapply(alt_us_reach,pull_data))
+      up_river_pull = try(lapply(alt_us_reach, pull_data, api_key = api_key))
       up_river_filt = lapply(up_river_pull[!is.na(up_river_pull)], filter_function)
       upObs_alt = rbindlist(up_river_filt)
       upObs_alt$time=as_datetime(upObs_alt$time_str)
@@ -279,61 +332,78 @@ combining_lk_rv_obs = function(lake){
       }
     }
   }
+
+  additional_us_obs = rbindlist(lapply(missing_up, shift_a_reach_up, api_key = api_key))
+  additional_us_obs$reach_id <- as.character(additional_us_obs$reach_id)
+  upObs_all$reach_id <- as.character(upObs_all$reach_id)
+
   
-  additional_us_obs = rbindlist(lapply(missing_up, shift_a_reach_up))
-  upObs_all = bind_rows(upObs_all, additional_us_obs)
+  if (nrow(upObs_all)==0) {
+    upObs_all= additional_us_obs
+  } else {
+    upObs_all = bind_rows(upObs_all, additional_us_obs)
+  }
   up_shifted = any(upObs_all$shifted=='yes')
-  
-  
+
+
   lakeObs_all = lakeFilt[lakeFilt$lake_id==lake,]
   lakeObs_all$time = as_datetime(lakeObs_all$time_str)
-  
+
   # FIXME: changing lake areas to pld mean lake areas due to SWOT errors. 
   prior_area = updated_pld$Lake_area[updated_pld$lake_id==lake]
   lakeObs_all$area_total = prior_area
   
-  if(nrow(lakeObs_all)<3){return(NA)}
-  
+  if(nrow(lakeObs_all)<3){
+    print('noo lake obs... exiting')
+    return(NA)}
+  if(nrow(upObs_all)<1){
+    print('nooo up obs... exiting')
+    return(NA)}
+  if(nrow(dnObs_all)<1){
+    print('nooo down obs... exiting')
+    return(NA)}
+
+
   ################################################################################
   # Get dates in proper format and subset to matching dates. 
   ################################################################################
   lakeObs_all$date = as.Date(lakeObs_all$time)
   upObs_all$date = as.Date(upObs_all$time)
   dnObs_all$date = as.Date(dnObs_all$time)
-  
+
   # FIXME: Aggregating lakes to mean values for multiple observations in one day. 
   lakeObs = data.table(lakeObs_all)[,c('wse', 'area_total', 'date')][,lapply(.SD, mean), by=date]
   upObs = data.table(upObs_all)[,c('wse', 'width', 'slope', 'slope2','reach_id', 'date')][,lapply(.SD, mean), by=list(date, reach_id)]
   dnObs = data.table(dnObs_all)[,c('wse', 'width', 'slope', 'slope2','reach_id', 'date')][,lapply(.SD, mean), by=list(date, reach_id)]
-  
+
   lkDates = unique(lakeObs$date)
   upDts = upObs[,.N,by=date][N>=length(upID)] # limit to dates with obs for each upstream reach.
   dnDts = dnObs[,.N,by=date][N>=length(dnID)] # limit to dates with obs for each downstream reach. 
-  
+
   #goodDates = lkDates[lkDates%in%upObs_all$date&lkDates%in%dnObs_all$date]
   goodDates = lkDates[lkDates%in%upDts$date&lkDates%in%dnDts$date]
-  
+
   lakeObsGood = lakeObs[lakeObs$date%in%goodDates,]
   upObsGood = upObs[upObs$date%in%goodDates,]
   dnObsGood = dnObs[dnObs$date%in%goodDates,]
-  
+
   lakeObs = lakeObsGood[order(lakeObsGood$date),]
   upObs = upObsGood[order(upObsGood$date),]
   dnObs = dnObsGood[order(dnObsGood$date),]
-  
+
   upObs = upObs[order(upObs$reach_id),]
   dnObs = dnObs[order(dnObs$reach_id),]
-  
+
   upObs$shifted = up_shifted
   dnObs$shifted = dn_shifted
-  
+
   if(nrow(lakeObs)<4){return(NA)}
   output = list(lakeObs, upObs, dnObs)
   return(output)
 }
 
 download_tributary = function(reaches, start_date='01-01-2023'){
-  print("downloading tribs")
+  # print("downloading tribs")
   # Function to pull tributary inflow Q estimates from Geoglows. 
   source_python('src/geoglows_aws_pull.py')
   tributary_flow = pull_tributary(reach_id = reaches, start_date=start_date)
@@ -345,7 +415,7 @@ download_tributary = function(reaches, start_date='01-01-2023'){
 
 
 pull_geoglows = function(reaches, start_date='01-01-2023'){
-  print("pulling geoglows")
+  # print("pulling geoglows")
   # Function to pull geoglows data for prior purposes
   source_python('src/geoglows_aws_pull.py')
   model_flow = pull_tributary(reach_id = reaches, start_date=start_date)
@@ -355,8 +425,7 @@ pull_geoglows = function(reaches, start_date='01-01-2023'){
 
 
 extract_data_by_lake <- function(lake, indir){
-  print("extracting data by lake"
-  )
+  # print("extracting data by lake")
     
     # Use dynamic prior Q. False = SOS prior estimate from GRADES / MAF geoglows
     use_ts_prior=TRUE
@@ -441,8 +510,11 @@ if (basename(opts$input_file) != "reaches_of_interest.json") {
 }else{
   reaches_of_interest <- fromJSON(opts$input_file)
   # lake_ids_subset <- lake_ids[grepl("3$", lake_ids)]
+  print("reaches of interest")
+  print(reaches_of_interest)
   connected_lake_ids <- get_connected_lake_ids(reach_ids = reaches_of_interest, pld = updated_pld)
   lakes_input <- data.table(lake = connected_lake_ids)
+  print(lakes_input)
 }
 
 files_filt = batch_download_SWOT_lakes(updated_pld$lake_id[updated_pld$lake_id%in%lakes_input$lake], api_key)
@@ -484,7 +556,7 @@ swot_river = rbindlist(swot_river_filt)
 swot_river$time=as_datetime(swot_river$time_str)
 
 # subset to lakes with enough lake and river SWOT obs to run LakeFlow. 
-viable_data = lapply(lakes, combining_lk_rv_obs)
+viable_data = lapply(lakes, combining_lk_rv_obs, api_key = api_key)
 names(viable_data) = lakes
 n_obs_lake = data.table(lake=lakes,obs=unlist(lapply(viable_data, length)))
 viable_locations = n_obs_lake[obs>=3,] #Note this 3 is for ensuring an inflow, lake, and outlfow have viable data. 
@@ -498,7 +570,7 @@ if (nrow(viable_locations) == 0){
 }
 
 for(i in 1:nrow(viable_locations)){
-  print(viable_locations)
+  # print(viable_locations)
     extract_data_by_lake(viable_locations$lake[i], indir)
 }
 
@@ -511,7 +583,3 @@ numbers <- gregexpr("[0-9]+", basename(opts$input_file))
 result <- unlist(regmatches(basename(opts$input_file), numbers))
 fwrite(viable_locations[,"lake"], file.path(indir, paste0("viable/viable_locations.csv")))
 print('Found viable lakes...')
-
-
-
-
