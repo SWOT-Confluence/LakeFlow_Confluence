@@ -47,7 +47,7 @@ option_list <- list(
   make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files"),
   make_option(c("-p", "--prefix"), type = "character", default = "", help = "prefix for hydrocron api-key storage"),
   ## I had an index argument, but the script is actually faster in seriel instead of calling hydrocron in parallel
-  make_option(c("--index"), type = "integer", default = NULL , help = "Chooses what lake to process from input file, if -256 it uses array number")
+  # make_option(c("--index"), type = "integer", default = NULL , help = "Chooses what lake to process from input file, if -256 it uses array number")
 )
 ################################################################################
 
@@ -65,13 +65,13 @@ indir <- opts$indir
 # Prefix for hydrocron API in the parameter store
 prefix <- opts$prefix
 
-# Set index, use array if index is -256
-index <- opts$index
-if (index == -256){
-  index <- strtoi(Sys.getenv("SLURM_ARRAY_TASK_ID"))
-}
-
-cat("SLURM_ARRAY_TASK_ID inside R:", Sys.getenv("SLURM_ARRAY_TASK_ID"), "\n")
+# # Set index, use array if index is -256
+# index <- opts$index
+# if (index == -256){
+#   index <- strtoi(Sys.getenv("SLURM_ARRAY_TASK_ID"))
+# }
+# 
+# cat("SLURM_ARRAY_TASK_ID inside R:", Sys.getenv("SLURM_ARRAY_TASK_ID"), "\n")
 
 ################################################################################
 # Load datasets
@@ -705,5 +705,5 @@ for(i in 1:nrow(viable_locations)){
 dir.create(file.path(indir, "viable"), showWarnings = FALSE)
 numbers <- gregexpr("[0-9]+", basename(opts$input_file))
 result <- unlist(regmatches(basename(opts$input_file), numbers))
-fwrite(viable_locations[,"lake"], file.path(indir, paste0("viable/viable_locations", index, ".csv")))
+fwrite(viable_locations[,"lake"], file.path(indir, paste0("viable/viable_locations.csv")))
 print('Found viable lakes...')
