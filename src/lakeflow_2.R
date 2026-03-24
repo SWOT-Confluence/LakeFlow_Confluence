@@ -84,7 +84,7 @@ updated_pld = fread(file.path(indir,"SWORDv17b_PLDv201.csv"))
 updated_pld$lake_id =  as.character(updated_pld$lake_id)
 updated_pld$continent = substr(updated_pld$lake_id, 1,1)
 
-sword_geoglows = fread(file.path(indir,'ancillary/sword_geoglows_w_ghost_reach.csv'))
+sword_geoglows = fread(file.path(indir,'ancillary/sword_geoglows.csv'))
 sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
 
 ################################################################################

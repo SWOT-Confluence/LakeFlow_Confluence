@@ -87,11 +87,11 @@ et_supplement = fread(file.path(indir, '/ancillary/et_supplement.csv'))
 et_supplement$lake_id <- as.character(et_supplement$lake_id)
 
 # Load tributary dataset
-tributary = fread(file.path(indir,'/ancillary/tributaries_w_ghost_reach.csv'))
+tributary = fread(file.path(indir,'/ancillary/tributaries.csv'))
 tributary$lake_id <- as.character(tributary$lake_id)
 
 # Load geoglows dataset
-sword_geoglows = fread(file.path(indir,'/ancillary/sword_geoglows_w_ghost_reach.csv'))
+sword_geoglows = fread(file.path(indir,'/ancillary/sword_geoglows.csv'))
 sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
 
 # Create a folder to store the downloaded/processed datasets
