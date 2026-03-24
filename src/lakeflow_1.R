@@ -45,7 +45,7 @@ option_list <- list(
   make_option(c("-c", "--input_file"), type = "character", default = NULL, help = "filepath to csv with lake ids to download data, point it to reaches_of_interest.json to process lakes associated with those reaches"),
   make_option(c("-w", "--workers"), type = "integer", default = NULL, help = "number of workers to use to download swot data"),
   make_option(c("-i", "--indir"), type = "character", default = NULL , help = "directory with input files"),
-  make_option(c("-p", "--prefix"), type = "character", default = "", help = "prefix for hydrocron api-key storage"),
+  make_option(c("-p", "--prefix"), type = "character", default = "", help = "prefix for hydrocron api-key storage")
   ## I had an index argument, but the script is actually faster in seriel instead of calling hydrocron in parallel
   # make_option(c("--index"), type = "integer", default = NULL , help = "Chooses what lake to process from input file, if -256 it uses array number")
 )
