@@ -15,9 +15,9 @@
 ####### end of job customization
 # end of environment & variable setup
 
-module load containers/apptainer
+module load apptainer/1.4.0
 apptainer exec \
     --pwd /projects/swot/hana/LakeFlow_Confluence \
     --bind /projects/swot/hana/LakeFlow_Confluence \
     --cleanenv \
-    /projects/swot/hana/LakeFlow_Confluence/lakeflow.sif Rscript src/lakeflow_2.R "in/viable/lakeflow${SLURM_ARRAY_TASK_ID}.csv" 6
+    /projects/swot/hana/LakeFlow_Confluence/lakeflow_deploy.sif Rscript src/lakeflow_2.R -c "in/viable/lakeflow${SLURM_ARRAY_TASK_ID}.csv" -s in/sos/constrained/ -w 6 -i in/ -o out/lf_results_global_run_6_vD_et/ -v 17
