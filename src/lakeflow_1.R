@@ -73,7 +73,7 @@ prefix <- opts$prefix
 # if (index == -256){
 #   index <- strtoi(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 # }
-# 
+
 # cat("SLURM_ARRAY_TASK_ID inside R:", Sys.getenv("SLURM_ARRAY_TASK_ID"), "\n")
 
 ################################################################################
@@ -150,7 +150,7 @@ get_api_key <- function(prefix) {
 }
 
 pull_lake_data <- function(feature_id, api_key){
-  website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?collection_name=SWOT_L2_HR_LakeSP_D&feature=PriorLake&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2027-12-31T00:00:00Z&output=csv&fields=lake_id,time_str,wse,area_total,xovr_cal_q,partial_f,dark_frac,ice_clim_f,xtrk_dist,quality_f,partial_f')
+  website = paste0('https://soto.podaac.earthdatacloud.nasa.gov/hydrocron/v1/timeseries?collection_name=SWOT_L2_HR_LakeSP_D&feature=PriorLake&feature_id=',feature_id, '&start_time=2023-01-01T00:00:00Z&end_time=2027-12-31T00:00:00Z&output=csv&fields=lake_id,time_str,wse,area_total,xovr_cal_q,partial_f,dark_frac,ice_clim_f,xtrk_dist,quality_f,partial_f,ds1_q')
   if (nzchar(api_key)) {
     # do something
     response = GET(website, add_headers("x-hydrocon-key" = api_key))
@@ -448,7 +448,7 @@ combining_lk_rv_obs = function(lake, api_key){
   dnObs_all$date = as.Date(dnObs_all$time)
   
   # FIXME: Aggregating lakes to mean values for multiple observations in one day. 
-  lakeObs = data.table(lakeObs_all)[,c('wse', 'area_total', 'date')][,lapply(.SD, mean), by=date]
+  lakeObs = data.table(lakeObs_all)[,c('wse', 'area_total', 'ds1_q','date')][,lapply(.SD, mean), by=date]
   upObs = data.table(upObs_all)[,c('wse', 'width', 'slope', 'slope2','reach_id', 'date')][,lapply(.SD, mean), by=list(date, reach_id)]
   dnObs = data.table(dnObs_all)[,c('wse', 'width', 'slope', 'slope2','reach_id', 'date')][,lapply(.SD, mean), by=list(date, reach_id)]
   
@@ -520,14 +520,33 @@ extract_data_by_lake <- function(lake, indir){
   dnObs = relevant_data[[3]]
   
   # Extract month and day from observation dates - used to assign et
-  lakeObs$month = month(lakeObs$date)
-  lakeObs$day = day(lakeObs$date)
+  et$month = month(et$date)
+  et$day = day(et$date)
   
   # Find lake depth (heat storage consideration)
   lake_depth <- et_supplement$Depth_avg[et_supplement$lake_id == lake][1]
   
   # Load dynamic ET data
   et_lake = et[et$lake_id==lake,]
+
+  # Newer code by Hana to sum up ET: the goal is to add dates up to present so that ones after 3/15 can be filled in later with DOY means.
+  # Create complete date sequence
+  all_dates <- data.table(date = seq(min(et_lake$date), Sys.Date(), by = "day"))
+
+  # Add month/day for later matching
+  all_dates[, `:=`(month = month(date), day = day(date))]
+
+  # Add missing dates while preserving existing observations
+  et_lake <- merge(all_dates, et_lake, by = c("date", "month", "day"), all.x = TRUE, sort = TRUE)
+  
+  # Find missing ET observations
+  missing_HS <- is.na(et_lake$E_mm_d_HS)
+  missing_noHS <- is.na(et_lake$E_mm_d_noHS)
+  et_subset <- et_supplement[et_supplement$lake_id == lake, ]
+  
+  # Fill in missing observations with DOY means
+  et_lake$E_mm_d_HS[missing_HS] <- et_subset$E_mm_d_HS_mean[match(paste(et_lake$month[missing_HS], et_lake$day[missing_HS]), paste(et_subset$month, et_subset$day))]
+  et_lake$E_mm_d_noHS[missing_noHS] <- et_subset$E_mm_d_noHS_mean[match(paste(et_lake$month[missing_noHS], et_lake$day[missing_noHS]), paste(et_subset$month, et_subset$day))]
   
   if(nrow(et_lake)==0){
     lakeObs$et = 0
@@ -542,29 +561,20 @@ extract_data_by_lake <- function(lake, indir){
       et_lake[, m3_s := ((E_mm_d_noHS * 0.001) * lake_area_m2) / 86400]
     }
     
-    # Match by date
-    lakeObs$et = et_lake$m3_s[match(lakeObs$date, et_lake$date)]
+    # Calculate the cumulative sum of et on each date
+    et_lake[, cs := cumsum(m3_s)]
+    lakeObs[et_lake, et_sum_end := i.cs, on = .(date), roll = TRUE]
+    
+    # Get the cumulative sum of et from the previous date and find interval sums
+    lakeObs[, et_sum_start := data.table::shift(et_sum_end)]
+    lakeObs[, et := et_sum_end - et_sum_start]
+    
+    # Assign an NA to the first row
+    lakeObs[1, et := NA]
   }
   
-  # Fill in missing dates with day-of-year ET means
-  missing <- is.na(lakeObs$et)
-  et_subset <- et_supplement[et_supplement$lake_id == lake, ]
-  
-  # Get lake area for conversion (if needed)
-  lake_area_m2 = lakeObs$area_total[1] * 1e6 # convert from km2 to m2
-  
-  # Convert evaporation rate of mm/d to m^3/s (depending on lake depth)
-  if (is.na(lake_depth)|| lake_depth >= 5){
-    et_subset[, m3_s := ((E_mm_d_HS_mean * 0.001) * lake_area_m2) / 86400]
-  } else if (lake_depth < 5){
-    et_subset[, m3_s := ((E_mm_d_noHS_mean * 0.001) * lake_area_m2) / 86400]
-  }	  
-  
-  # Fill in missing observations
-  lakeObs$et[missing] <- et_subset$m3_s[match(paste(lakeObs$month[missing], lakeObs$day[missing]), paste(et_subset$month, et_subset$day))]	
-  
   # Remove month and day fields from lakeObs
-  lakeObs[, c("month", "day") := NULL]
+  lakeObs[, c("et_sum_start", "et_sum_end") := NULL]
   
   # add in tributary data:Either use geoglow (ts==TRUE or use GRADES-hydroDL mean monthly vals)
   if(use_ts_tributary==TRUE){
@@ -574,9 +584,21 @@ extract_data_by_lake <- function(lake, indir){
     }else{
       tributary_reaches = unique(tributary_locations$LINKNO[tributary_locations$lake_id==lake])
       tributary_reaches = as.list(tributary_reaches)
-      tributary_data = download_tributary(tributary_reaches,'01-01-1940')
-      mean_annual = mean(tributary_data[,year:=lubridate::year(date)][,mean(tributary_total),year]$V1)
-      lakeObs$tributary_total = tributary_data$tributary_total[match(lakeObs$date, tributary_data$date)]
+      tributary_data = download_tributary(tributary_reaches,'01-01-2023')
+      
+      # Calculate the cumulative sum of tributary inflows on each date
+      tributary_data[, cs := cumsum(tributary_total)]
+      lakeObs[tributary_data, tributary_sum_end := i.cs, on = .(date), roll = TRUE]
+      
+      # Get the cumulative sum of lateral inflows from the previous date and find interval sums
+      lakeObs[, tributary_sum_start := data.table::shift(tributary_sum_end)]
+      lakeObs[, tributary_total := tributary_sum_end - tributary_sum_start]
+      
+      # Assign an NA to the first row
+      lakeObs[1, tributary_total := NA]
+      
+      # Remove month, day, and other extra fields from lakeObs
+      lakeObs[, c("tributary_sum_start", "tributary_sum_end") := NULL]
     }
   }else{
     tributary_locations = tributary[tributary$lake_id==(lake),]
@@ -585,7 +607,7 @@ extract_data_by_lake <- function(lake, indir){
     }else{
       tributary_reaches = unique(tributary_locations$LINKNO[tributary_locations$lake_id==lake])
       tributary_reaches = as.list(tributary_reaches)
-      tributary_data = download_tributary(tributary_reaches,'01-01-1940')
+      tributary_data = download_tributary(tributary_reaches,'01-01-2023')
       mean_annual = mean(tributary_data[,year:=lubridate::year(date)][,mean(tributary_total),year]$V1)
       lakeObs$tributary_total = mean_annual
     }
@@ -597,7 +619,7 @@ extract_data_by_lake <- function(lake, indir){
   sword_reaches = c(upID, dnID)
   sword_geoglows_filt = sword_geoglows[sword_geoglows$reach_id%in%sword_reaches,c('reach_id','LINKNO')]
   geoglows_reaches = unique(as.list(sword_geoglows$LINKNO[sword_geoglows$reach_id%in%sword_reaches]))
-  model_data = pull_geoglows(geoglows_reaches, '01-01-1940')
+  model_data = pull_geoglows(geoglows_reaches, '01-01-2023')
   
   # Save 
   fwrite(lakeObs, file.path(indir, paste0("clean/lakeobs_", lake, ".csv")))
@@ -694,7 +716,7 @@ if (nrow(viable_locations) == 0){
 
 for(i in 1:nrow(viable_locations)){
   # print(viable_locations)
-  extract_data_by_lake(viable_locations$lake[i], indir)
+    extract_data_by_lake(viable_locations$lake[i], indir)
 }
 
 ################################################################################

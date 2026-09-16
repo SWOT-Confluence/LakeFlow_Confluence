@@ -98,7 +98,7 @@ sword_geoglows$reach_id = as.character(sword_geoglows$reach_id)
 lakeFlow = function(lake){
   
   # Use dynamic prior Q. False = SOS prior estimate from GRADES / MAF geoglows
-  use_ts_prior=TRUE
+  use_ts_prior=FALSE
   
   # Use modeled daily tributary flows. False = mean monthly grades tributaries / MAF geoglows
   use_ts_tributary=TRUE
@@ -140,7 +140,24 @@ lakeFlow = function(lake){
     area_val[[k]] = area_add+area_sqrt
   }
   area_param = c(NA, unlist(area_val))
-  lakeObs$storage_dt = (ht_change*area_param)/3
+  # lakeObs$storage_dt = (ht_change*area_param)/3
+
+  # New code for lake storage change - Hana
+  storage_convert = lakeObs$ds1_q*1e9 #convert from km3 to m3
+  # lakeObs$storage_dt[is.na(lakeObs$storage_dt)] = 0 #filling NA dates to 0 to test for now and see how many there are
+
+  # Calculate storage change as difference between current and prior storage value.
+  storage_val = list()
+  for(k in 2:length(storage_convert)){
+    current = storage_convert[k]
+    prior = storage_convert[k-1]
+    storage_val[[k]] = current-prior
+  }
+  storage_dt = c(NA, unlist(storage_val))
+  lakeObs$storage_dt = storage_dt
+
+  # Remove SWOT storage change field from lakeObs for stan code
+  lakeObs[, c("ds1_q") := NULL]
   
   # Put data into table matching LakeFlow code (synthetic dataset): 
   lakeObsOut = lakeObs
@@ -249,6 +266,40 @@ lakeFlow = function(lake){
     return(data.table(reach_id, geoA, geoN, geoNlower, geoNupper, geoAlower, geoAupper,
                       geoAsd, geoNsd, qHat, qUpper, qLower, sigma, qSd))
   }
+
+  # New code added by Hana: Function to extract monthly Q priors from SoS - needs to be separate from other priors since dims are different.
+  sos_pull_monthly = function(reach_id){
+    if (updated_pld$continent[updated_pld$lake_id==lake] == 1) {
+      sos = file.path(sos_dir,paste0("af_sword_v", SWORD_VERSION, "_SOS_priors.nc"))
+    } else if (updated_pld$continent[updated_pld$lake_id==lake] == 2) {
+      sos = file.path(sos_dir,paste0("eu_sword_v", SWORD_VERSION, "_SOS_priors.nc"))
+    } else if (updated_pld$continent[updated_pld$lake_id==lake] == 3) {
+      sos = file.path(sos_dir,paste0("as_sword_v", SWORD_VERSION, "_SOS_priors.nc"))
+    } else if (updated_pld$continent[updated_pld$lake_id==lake] == 4) {
+      sos = file.path(sos_dir,paste0("as_sword_v", SWORD_VERSION, "_SOS_priors.nc"))
+    } else if (updated_pld$continent[updated_pld$lake_id==lake] == 5) {
+      sos = file.path(sos_dir,paste0("oc_sword_v", SWORD_VERSION, "_SOS_priors.nc"))
+    } else if (updated_pld$continent[updated_pld$lake_id==lake] == 6) {
+      sos = file.path(sos_dir,paste0("sa_sword_v", SWORD_VERSION, "_SOS_priors.nc"))
+    } else {sos = file.path(sos_dir,paste0("na_sword_v", SWORD_VERSION, "_SOS_priors.nc"))} #Sets NA priors for continents 7, 8, and 9
+    sos_outflow = RNetCDF::open.nc(sos)
+    reach_grp <- RNetCDF::grp.inq.nc(sos_outflow, "reaches")$self
+    reach_ids <- RNetCDF::var.get.nc(reach_grp, "reach_id")
+    index <- which(reach_ids==reach_id, arr.ind=TRUE)
+    model_grp <- RNetCDF::grp.inq.nc(sos_outflow, "model")$self
+    num_months <- RNetCDF::var.get.nc(model_grp, "num_months")
+    num_months <- as.vector(num_months)
+    monthly_q_all <- RNetCDF::var.get.nc(model_grp, "monthly_q")
+    monthlyQ <- monthly_q_all[, index]
+    # If monthly Q is missing, assign temporary prior of 1000 cms to be filled in by GeoGlows later.
+    if(length(monthlyQ) == 0) {
+      monthlyQ <- rep(1000, 12)
+    } else {
+      monthlyQ[is.na(monthlyQ)] <- 1000
+    }
+
+    return(data.table(reach_id = reach_id, month = num_months, monthly_q = monthlyQ))
+  }
   
   # Create our own geobam priors when SoS provides null priors - common issue bc lake influenced reaches often don't pass SoS QAQC.
   sos_fit = function(df){
@@ -288,17 +339,25 @@ lakeFlow = function(lake){
   # Pull priors from sos 
   #New 'any(is.na)...' is new to account for NA values in addition to zeros. 
   up_sos = lapply(upID, sos_pull)
-  sos_geobam = 'sos'
+  up_sos_monthly_list <- lapply(upID, sos_pull_monthly)
+  print(up_sos_monthly_list)
+  up_sos_monthly = data.table::rbindlist(lapply(upID, sos_pull_monthly))
+  # sos_geobam = 'sos' # Update: Commenting out all prev sos_geobam to make sure prior_fit can be different for two reaches on the same lake.
+  up_prior_fit = 'sos'
   if(any(unlist(lapply(up_sos, nrow))==0)|any(is.na(unlist(up_sos)))){
     up_sos = sos_fit(up_df_stan)
-    sos_geobam = 'geobam'
+    # sos_geobam = 'geobam'
+    up_prior_fit = 'geobam'
   }
   up_sos = lapply(up_sos, nms_paste, 'u')
   
   dn_sos = lapply(dnID, sos_pull)
+  dn_sos_monthly = data.table::rbindlist(lapply(dnID, sos_pull_monthly))
+  dn_prior_fit = 'sos'
   if(any(unlist(lapply(dn_sos, nrow))==0)|any(is.na(unlist(dn_sos)))){
     dn_sos = sos_fit(dn_df_stan)
-    sos_geobam = 'geobam'
+    # sos_geobam = 'geobam'
+    dn_prior_fit = 'geobam'
   }
   dn_sos = lapply(dn_sos, nms_paste, 'd')
   
@@ -336,6 +395,31 @@ lakeFlow = function(lake){
   dn_sos_stan$qSd_d = convert_to_matrix(dn_sos_stan$qSd_d)
   up_sos_stan$qHat_u = convert_to_matrix(up_sos_stan$qHat_u)
   dn_sos_stan$qHat_d = convert_to_matrix(dn_sos_stan$qHat_d)
+
+  # New code from Hana: For reaches where we have monthly SoS Q priors, substitute in those values by month for qHat.
+  obs_months <- lubridate::month(lakeObsOut$date_l)
+
+  print(class(up_sos_monthly))
+  print(class(dn_sos_monthly))
+
+  print(data.table::is.data.table(up_sos_monthly))
+  print(data.table::is.data.table(dn_sos_monthly))
+
+  print(names(up_sos_monthly))
+  print(names(dn_sos_monthly))
+
+  match_monthly_q <- function(monthly_dt, reach_order){
+    print(monthly_dt)
+    do.call(rbind, lapply(reach_order, function(rid){
+      print(rid)
+      sub <- monthly_dt[reach_id == rid]
+      vec <- sub$monthly_q[match(1:12, sub$month)]
+      vec[obs_months]
+    }))
+  }
+
+  up_sos_stan$qHat_u <- match_monthly_q(up_sos_monthly, upID)
+  dn_sos_stan$qHat_d <- match_monthly_q(dn_sos_monthly, dnID)
   
   if(length(up_sos_stan$reach_id_u)==0){return(NA)}
   if(length(dn_sos_stan$reach_id_d)==0){return(NA)}
@@ -409,14 +493,28 @@ lakeFlow = function(lake){
       x[is.na(x)] <- mean(x, na.rm = TRUE)
       x})
     #model_data = model_data[model_data$Date%in%lakeObsOut$date_l,]
-    model_annual = model_data[,year:=lubridate::year(Date),]
-    model_wide = melt(model_data, id.vars=c('year'))
-    model_wide = model_wide[,list(value=mean(value)),by=list(year, variable)][,list(value=mean(value)),by=variable][variable!='Date']
-    model_wide = model_wide[rep(model_wide[,.I], nrow(lakeObsOut))]
+
+    # # Hana: Commenting out code for getting mean flow and instead testing grabbing GeoGlows monthly flow.
+    # model_annual = model_data[,year:=lubridate::year(Date),]
+    # model_wide = melt(model_data, id.vars=c('year'))
+    # model_wide = model_wide[,list(value=mean(value)),by=list(year, variable)][,list(value=mean(value)),by=variable][variable!='Date']
+    # model_wide = model_wide[rep(model_wide[,.I], nrow(lakeObsOut))]
     
-    model_wide$LINKNO = as.character(model_wide$variable)
-    model_wide$reach_id = sword_geoglows_filt$reach_id[match(model_wide$LINKNO, sword_geoglows_filt$LINKNO)]
-    model_list = split(model_wide, by='reach_id')
+    # model_wide$LINKNO = as.character(model_wide$variable)
+    # model_wide$reach_id = sword_geoglows_filt$reach_id[match(model_wide$LINKNO, sword_geoglows_filt$LINKNO)]
+    # model_list = split(model_wide, by='reach_id')
+
+    model_data[, month := lubridate::month(Date)]
+    model_wide <- melt(model_data, id.vars = c("Date", "month"), variable.name = "LINKNO", value.name = "value")
+    model_monthly <- model_wide[, .(value = mean(value, na.rm = TRUE)), by = .(LINKNO, month)]
+
+    obs_months <- lubridate::month(lakeObsOut$date_l)
+    model_wide <- merge(data.table(Date = lakeObsOut$date_l, month = obs_months), model_monthly, by = "month", allow.cartesian = TRUE)
+    model_wide <- model_wide[order(LINKNO, Date)]
+    model_wide$LINKNO <- as.character(model_wide$LINKNO)
+
+    model_wide$reach_id <- sword_geoglows_filt$reach_id[match(model_wide$LINKNO, sword_geoglows_filt$LINKNO)]
+    model_list <- split(model_wide, by = "reach_id")
     
     up_ind = lapply(up_sos_stan$reach_id_u,function(x){which(as.character(x)==names(model_list))})
     dn_ind = lapply(dn_sos_stan$reach_id_d,function(x){which(as.character(x)==names(model_list))})
@@ -432,8 +530,11 @@ lakeFlow = function(lake){
     dn_qhat = lapply(unlist(dn_ind), function(x){t(as.matrix(model_list[[x]]$value))})
     dn_qhat = do.call(rbind, dn_qhat)
     
-    up_sos_stan$qHat_u = up_qhat
-    dn_sos_stan$qHat_d = dn_qhat
+    # New from Hana - forces it to use ML prior rather than time series prior, EXCEPT where ML prior is missing.
+    # up_sos_stan$qHat_u = up_qhat
+    # dn_sos_stan$qHat_d = dn_qhat
+    up_sos_stan$qHat_u[up_sos_stan$qHat_u == 1000] <- up_qhat[up_sos_stan$qHat_u == 1000]
+    dn_sos_stan$qHat_d[dn_sos_stan$qHat_d == 1000] <- dn_qhat[dn_sos_stan$qHat_d == 1000]
   }
   
   #New: Stan can't handle 0 prior estimates of discharge. So it replaces it with the mean value. 
@@ -458,8 +559,8 @@ lakeFlow = function(lake){
                    s2=log(dn_df_stan$slope2_d), # = smoothed slope (slope2) produced similar results as raw slope 
                    q2=log(dn_sos_stan$qHat_d),#rep(log(qHatOut),nrow(data)),
                    #dv=data$storage_dt_l/86400, #seconds per day
-                   et=lakeObsOut$et,#rep(0, nrow(lakeObsOut)), # filled with zero vals right now
-                   lateral=lakeObsOut$tributary_total,#rep(0,nrow(lakeObsOut)), # filled with zero vals right now
+                   et=(lakeObsOut$et)/(lakeObsOut$n_days),#rep(0, nrow(lakeObsOut)), # average daily rate
+                   lateral=(lakeObsOut$tributary_total)/(lakeObsOut$n_days),#rep(0,nrow(lakeObsOut)), # average daily rate
                    dv_per = (lakeObsOut$storage_dt_l/86400)/lakeObsOut$n_days)
   
   
@@ -569,7 +670,14 @@ lakeFlow = function(lake){
   
   
   output_df = bind_rows(inflow_outputs, outflow_outputs)
-  output_df$prior_fit = sos_geobam
+
+  # New from Hana - add column to indicate whether SoS or GeoBAM priors were used for each REACH, not lake.
+  # output_df$prior_fit = sos_geobam
+  output_df$prior_fit <- c(
+    rep(up_prior_fit, nrow(inflow_outputs)),
+    rep(dn_prior_fit, nrow(outflow_outputs))
+  )
+
   fwrite(output_df, file.path(outdir, paste0(lake, '.csv')))
   
   return()
