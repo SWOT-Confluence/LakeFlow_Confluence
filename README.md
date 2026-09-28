@@ -33,6 +33,9 @@ In addition to SWOT River & LakeSP data, which are pulled within the algorithm u
 `src/lakeflow_stan_flexible.stan`
 * This Stan code is used to apply the Bayesian inference that constrains the uncertainty in unknown parameters for LakeFlow. It is called in the `lakeflow_2.R` script.
 
+`src/master.stan`
+* This Stan code is used as a patch to update the geoBAMr package for Stan's new array syntax. geoBAMr is required for the `lakeflow_2.R` script.
+
 `Dockerfile_input`
 * Dockerfile for `lakeflow_1.R`
 
