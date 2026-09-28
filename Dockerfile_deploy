@@ -59,6 +59,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.R .
 RUN Rscript requirements.R
 
+COPY src/master.stan /src/master.stan
+RUN git clone https://github.com/craigbrinkerhoff/geoBAMr.git /tmp/geoBAMr \
+ && cd /tmp/geoBAMr \
+ && git checkout 99af8e143a1d15fb93ae08efd45a3898c3185916 \
+ && cp /src/master.stan inst/stan/master.stan \
+ && chmod +x configure
+
+RUN R CMD INSTALL /tmp/geoBAMr
+
 FROM stage0 AS stage1
 #move all the scripts needed
 COPY /src/lakeflow_2.R .

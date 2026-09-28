@@ -1,11 +1,11 @@
-//Make sure et/lateral are/not in log space. 
+//Make sure et/lateral are/not in log space.
 data {
   // Dimensions
   int N; //number of time steps
   int n1; //number of inflows
   int n2; //number of outflows
-  
-  // bounds on parameters - write as vectors to allow for multiple inflows/outflows. 
+
+  // bounds on parameters - write as vectors to allow for multiple inflows/outflows.
   vector[n1] nInlower;
   vector[n1] nInupper;
   vector[n2] nOutlower;
@@ -28,20 +28,20 @@ data {
   vector[n2] aOutSd;
   vector[n2] qOutupper;
   vector[n2] qOutlower;
-  
-  vector[N] sigmaIn[n1];
-  vector[N] sigmaOut[n2];
-  vector[N] qInSd[n1];
-  vector[N] qOutSd[n2];
-  vector[N] q[n1];
-  
-  vector[N] da[n1];
-  vector[N] w[n1];
-  vector[N] s[n1];
-  vector[N] da2[n2];
-  vector[N] w2[n2];
-  vector[N] s2[n2];
-  vector[N] q2[n2];
+
+  array[n1] vector[N] sigmaIn;
+  array[n2] vector[N] sigmaOut;
+  array[n1] vector[N] qInSd;
+  array[n2] vector[N] qOutSd;
+  array[n1] vector[N] q;
+
+  array[n1] vector[N] da;
+  array[n1] vector[N] w;
+  array[n1] vector[N] s;
+  array[n2] vector[N] da2;
+  array[n2] vector[N] w2;
+  array[n2] vector[N] s2;
+  array[n2] vector[N] q2;
   vector[N] dv_per;
   vector[N] et;
   vector[N] lateral;
@@ -52,29 +52,26 @@ parameters {
   vector < lower=aInlower[n1], upper=aInupper[n1] >[n1] a; // Bathymetry
   vector < lower=nOutlower[n2], upper=nOutupper[n2] >[n2] nOut; // mannning's n
   vector < lower=aOutlower[n2], upper=aOutupper[n2] >[n2] aOut; // Bathymetry
-  real < lower = 0 > sigma; // Error SD
-  vector < lower = qInlower[n1], upper=qInupper[n1]>[N] logQ_in[n1]; //Inflow Q timeseries
-  vector < lower = qOutlower[n2], upper=qOutupper[n2]>[N] logQ_out[n2]; //Outflow Q timeseries
-  
-  //vector[N] logQ_in[n1]; //Inflow Q timeseries
-  //vector[N] logQ_out[n2]; //Outflow Q timeseries
+  real < lower=0 > sigma; // Error SD
+  array[n1] vector < lower=qInlower[n1], upper=qInupper[n1]>[N] logQ_in; //Inflow Q timeseries
+  array[n2] vector < lower=qOutlower[n2], upper=qOutupper[n2]>[N] logQ_out; //Outflow Q timeseries
 }
 
 transformed parameters {
-  vector[N] lhsIn[n1]; // LHS for Manning likelihood
-  vector[N] rhsIn[n1]; // log area for Manning's equation
-  vector[N] lhsOut[n2]; // LHS for Manning likelihood
-  vector[N] rhsOut[n2]; // log area for Manning's equation
+  array[n1] vector[N] lhsIn; // LHS for Manning likelihood
+  array[n1] vector[N] rhsIn; // log area for Manning's equation
+  array[n2] vector[N] lhsOut; // LHS for Manning likelihood
+  array[n2] vector[N] rhsOut; // log area for Manning's equation
   vector[N] lhsDV; // LHS for Manning likelihood
-  vector<lower = sum(exp(qInlower)), upper = sum(exp(qInupper))>[N] sumIn;
-  vector<lower = sum(exp(qOutlower)), upper = sum(exp(qOutupper))>[N] sumOut;
+  vector<lower=sum(exp(qInlower)), upper=sum(exp(qInupper))>[N] sumIn;
+  vector<lower=sum(exp(qOutlower)), upper=sum(exp(qOutupper))>[N] sumOut;
   //vector[N] sumIn;
   //vector[N] sumOut;
   vector[N] rhsDV; // log area for Manning's equation
-  
-  vector[N] a1[n1];
-  vector[N] a2[n2];
-  
+
+  array[n1] vector[N] a1;
+  array[n2] vector[N] a2;
+
   //For each inflow solve Manning's
   for(j in 1:n1){
     a1[j,] = log(da[j,]+a[j]);
@@ -89,22 +86,18 @@ transformed parameters {
     rhsOut[k,] = ((-6*nOut[k])+(10*a2[k,]))-(6*logQ_out[k,]);
   }
 
-  
   lhsDV = (dv_per)-lateral+et;
-  
-  //For each timestep, sum inflows and outflows and then subtract them. 
+
+  //For each timestep, sum inflows and outflows and then subtract them.
   for(i in 1:N){
     sumIn[i] = sum(exp(logQ_in[,i]));
     sumOut[i] = sum(exp(logQ_out[,i]));
     rhsDV[i] = sumIn[i] - sumOut[i];
     //rhsDV[i] = sum(exp(logQ_in[,i])) - sum(exp(logQ_out[,i]));
   }
-
 }
 
-
 model {
-  
   for(x in 1:n1){
     logQ_in[x,]~normal(q[x,],qInSd[x,]);
     n[x] ~ normal(nInHat[x],nInSd[x]);
@@ -118,7 +111,6 @@ model {
     aOut[y] + daOutShift[y]~lognormal(aOutHat[y], aOutSd[y]);
     lhsOut[y,]~normal(rhsOut[y,], sigmaOut[y,]);
   }
-  
+
   lhsDV~normal(rhsDV, sigma);
 }
-
