@@ -25,6 +25,15 @@ library(paws)
 library(logger)
 '%!in%' <- function(x,y)!('%in%'(x,y))
 
+# Checks whether an adjacent SWORD reach is similar enough (drainage area + orbits) to shift onto.
+# Returns FALSE (instead of raising on NA/NaN) when facc_orig is 0 or facc/orbits contain NAs,
+# which happens for some headwater/outlet or fill-value reaches in SWORD.
+similar_reach = function(facc_orig, facc_alt, orbits_orig, orbits_alt){
+  if(is.na(facc_orig) || is.na(facc_alt) || facc_orig==0){ return(FALSE) }
+  if(any(is.na(orbits_orig)) || any(is.na(orbits_alt))){ return(FALSE) }
+  (((facc_alt - facc_orig)/facc_orig)*100 < 10) & all(orbits_orig==orbits_alt)
+}
+
 # Add in which python version to use with reticulate
 use_python("/usr/local/bin/python3.12")
 
@@ -323,19 +332,24 @@ combining_lk_rv_obs = function(lake, api_key){
         orbits_alt = sword$swot_orbits[sword$reach_id==alt_ds_reach] #Get orbits for alt reach
         
         #Adjacent reach must have similar contributing drainage area AND identical orbits
-        if(((((facc_alt - facc_orig)/facc_orig)*100) < 10) & (all(orbits_orig == orbits_alt))) {
-          dn_river_pull = try(lapply(alt_ds_reach, pull_data, api_key = api_key))
-          dn_river_filt = lapply(dn_river_pull[!is.na(dn_river_pull)], filter_function)
-          dnObs_alt = rbindlist(dn_river_filt)
-          dnObs_alt$time=as_datetime(dnObs_alt$time_str)
-          dnObs_alt$reach_id_original = dnObs_alt$reach_id
-          dnObs_alt$reach_id = f
-          dnObs_alt$shifted = 'yes'
-          if(nrow(dnObs_alt)>0){
-            return(dnObs_alt)
-          } else{
-            reach = alt_ds_reach
-          }
+        if(!similar_reach(facc_orig, facc_alt, orbits_orig, orbits_alt)){
+          log_warn(paste0("Skipping downstream shift for reach ", reach, " -> ", alt_ds_reach,
+                           ": facc_orig=", facc_orig, ", facc_alt=", facc_alt,
+                           ", orbits_orig=", paste(orbits_orig, collapse=","),
+                           ", orbits_alt=", paste(orbits_alt, collapse=",")))
+          next
+        }
+        dn_river_pull = try(lapply(alt_ds_reach, pull_data, api_key = api_key))
+        dn_river_filt = lapply(dn_river_pull[!is.na(dn_river_pull)], filter_function)
+        dnObs_alt = rbindlist(dn_river_filt)
+        dnObs_alt$time=as_datetime(dnObs_alt$time_str)
+        dnObs_alt$reach_id_original = dnObs_alt$reach_id
+        dnObs_alt$reach_id = f
+        dnObs_alt$shifted = 'yes'
+        if(nrow(dnObs_alt)>0){
+          return(dnObs_alt)
+        } else{
+          reach = alt_ds_reach
         }
       }
     } 
@@ -391,19 +405,24 @@ combining_lk_rv_obs = function(lake, api_key){
         orbits_alt = sword$swot_orbits[sword$reach_id==alt_us_reach] #Get orbits for alt reach
         
         #Adjacent reach must have similar contributing drainage area AND identical orbits
-        if(((((facc_alt - facc_orig)/facc_orig)*100) < 10) & (all(orbits_orig == orbits_alt))) {
-          up_river_pull = try(lapply(alt_us_reach, pull_data, api_key = api_key))
-          up_river_filt = lapply(up_river_pull[!is.na(up_river_pull)], filter_function)
-          upObs_alt = rbindlist(up_river_filt)
-          upObs_alt$time=as_datetime(upObs_alt$time_str)
-          upObs_alt$reach_id_original = upObs_alt$reach_id
-          upObs_alt$reach_id = f
-          upObs_alt$shifted = 'yes'
-          if(nrow(upObs_alt)>0){
-            return(upObs_alt)
-          } else{
-            reach = alt_us_reach
-          }
+        if(!similar_reach(facc_orig, facc_alt, orbits_orig, orbits_alt)){
+          log_warn(paste0("Skipping upstream shift for reach ", reach, " -> ", alt_us_reach,
+                           ": facc_orig=", facc_orig, ", facc_alt=", facc_alt,
+                           ", orbits_orig=", paste(orbits_orig, collapse=","),
+                           ", orbits_alt=", paste(orbits_alt, collapse=",")))
+          next
+        }
+        up_river_pull = try(lapply(alt_us_reach, pull_data, api_key = api_key))
+        up_river_filt = lapply(up_river_pull[!is.na(up_river_pull)], filter_function)
+        upObs_alt = rbindlist(up_river_filt)
+        upObs_alt$time=as_datetime(upObs_alt$time_str)
+        upObs_alt$reach_id_original = upObs_alt$reach_id
+        upObs_alt$reach_id = f
+        upObs_alt$shifted = 'yes'
+        if(nrow(upObs_alt)>0){
+          return(upObs_alt)
+        } else{
+          reach = alt_us_reach
         }
       }
     } 
