@@ -4,18 +4,20 @@ install.packages("RNetCDF")
 install.packages("remotes")
 library(remotes)
 
-# geoBAMr (last updated 2022) bundles a .stan file using old array syntax
-# (e.g. `vector[] x`) in a function signature. Current CRAN rstan/StanHeaders
-# use a stanc3 parser that treats this as a hard error instead of a
-# deprecation warning, so geoBAMr's install-time model compilation fails
-# against them. Pin to the last rstan/StanHeaders pair that still accepts
-# the old syntax, and install before geoBAMr so its Stan model compiles.
-# Current RcppParallel bundles oneTBB, which dropped the legacy
-# tbb/task_scheduler_init.h header that StanHeaders 2.21.x's threadpool
-# code includes. Pin RcppParallel to a pre-oneTBB release too.
-remotes::install_version("RcppParallel", version = "5.1.4", repos = "https://cloud.r-project.org", upgrade = "never")
-remotes::install_version("StanHeaders", version = "2.21.0-7", repos = "https://cloud.r-project.org", upgrade = "never")
-remotes::install_version("rstan", version = "2.21.8", repos = "https://cloud.r-project.org", upgrade = "never")
+# Pin the rstan toolchain to the versions confirmed working in the last
+# successfully built image (ghcr.io/swot-confluence/lakeflow_input:latest,
+# built ~5 months ago): rstan 2.32.7 / StanHeaders 2.32.10 / RcppParallel
+# 5.1.11-2 / Rcpp 1.1.1-1.1, on Debian 13 (trixie) with g++ 14.2.0 and
+# R 4.5.0 (same OS/toolchain this image now builds on). Current CRAN
+# "latest" StanHeaders (2.39.1.1) reorganizes Stan Math header paths, and
+# current RcppParallel (6.2.1) switched to oneTBB and dropped the legacy
+# tbb/task_scheduler_init.h header that StanHeaders's threadpool code
+# includes -- both break compiling rstan/geoBAMr. upgrade="never" stops
+# remotes from silently bumping these while resolving dependencies.
+remotes::install_version("Rcpp", version = "1.1.1-1.1", repos = "https://cloud.r-project.org", upgrade = "never")
+remotes::install_version("RcppParallel", version = "5.1.11-2", repos = "https://cloud.r-project.org", upgrade = "never")
+remotes::install_version("StanHeaders", version = "2.32.10", repos = "https://cloud.r-project.org", upgrade = "never")
+remotes::install_version("rstan", version = "2.32.7", repos = "https://cloud.r-project.org", upgrade = "never")
 library(rstan)
 
 remotes:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE)
