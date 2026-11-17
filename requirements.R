@@ -10,8 +10,8 @@ library(remotes)
 # deprecation warning, so geoBAMr's install-time model compilation fails
 # against them. Pin to the last rstan/StanHeaders pair that still accepts
 # the old syntax, and install before geoBAMr so its Stan model compiles.
-remotes::install_version("StanHeaders", version = "2.21.0-7", repos = "https://cloud.r-project.org")
-remotes::install_version("rstan", version = "2.21.8", repos = "https://cloud.r-project.org")
+remotes::install_version("StanHeaders", version = "2.21.0-7", repos = "https://cloud.r-project.org", upgrade = "never")
+remotes::install_version("rstan", version = "2.21.8", repos = "https://cloud.r-project.org", upgrade = "never")
 library(rstan)
 
 remotes:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE)
