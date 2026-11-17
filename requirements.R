@@ -10,6 +10,10 @@ library(remotes)
 # deprecation warning, so geoBAMr's install-time model compilation fails
 # against them. Pin to the last rstan/StanHeaders pair that still accepts
 # the old syntax, and install before geoBAMr so its Stan model compiles.
+# Current RcppParallel bundles oneTBB, which dropped the legacy
+# tbb/task_scheduler_init.h header that StanHeaders 2.21.x's threadpool
+# code includes. Pin RcppParallel to a pre-oneTBB release too.
+remotes::install_version("RcppParallel", version = "5.1.4", repos = "https://cloud.r-project.org", upgrade = "never")
 remotes::install_version("StanHeaders", version = "2.21.0-7", repos = "https://cloud.r-project.org", upgrade = "never")
 remotes::install_version("rstan", version = "2.21.8", repos = "https://cloud.r-project.org", upgrade = "never")
 library(rstan)
