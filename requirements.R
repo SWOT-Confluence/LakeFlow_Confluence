@@ -20,7 +20,10 @@ remotes::install_version("StanHeaders", version = "2.32.10", repos = "https://cl
 remotes::install_version("rstan", version = "2.32.7", repos = "https://cloud.r-project.org", upgrade = "never")
 library(rstan)
 
-remotes:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE)
+# upgrade="never" here too -- otherwise remotes re-resolves geoBAMr's
+# dependencies against latest CRAN and clobbers the pins above right
+# before geoBAMr's Stan model gets compiled against them.
+remotes:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE, upgrade="never")
 library(geoBAMr)
 install.packages("foreign")
 library(foreign)
