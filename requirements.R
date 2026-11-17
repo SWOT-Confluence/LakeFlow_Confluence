@@ -3,14 +3,23 @@ install.packages("ncdf4")
 install.packages("RNetCDF")
 install.packages("remotes")
 library(remotes)
-remotes:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE) 
+
+# geoBAMr (last updated 2022) bundles a .stan file using old array syntax
+# (e.g. `vector[] x`) in a function signature. Current CRAN rstan/StanHeaders
+# use a stanc3 parser that treats this as a hard error instead of a
+# deprecation warning, so geoBAMr's install-time model compilation fails
+# against them. Pin to the last rstan/StanHeaders pair that still accepts
+# the old syntax, and install before geoBAMr so its Stan model compiles.
+remotes::install_version("StanHeaders", version = "2.21.0-7", repos = "https://cloud.r-project.org")
+remotes::install_version("rstan", version = "2.21.8", repos = "https://cloud.r-project.org")
+library(rstan)
+
+remotes:: install_github("craigbrinkerhoff/geoBAMr", force=TRUE)
 library(geoBAMr)
 install.packages("foreign")
 library(foreign)
 install.packages("lubridate")
 library(lubridate)
-install.packages("rstan")
-library(rstan)
 install.packages("data.table")
 library(data.table)
 install.packages("dplyr")
